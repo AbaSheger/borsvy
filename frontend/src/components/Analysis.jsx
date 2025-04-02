@@ -5,6 +5,7 @@ import StockChart from './StockChart';
 import PeerComparison from './PeerComparison';
 import NewsCard from './NewsCard';
 import AnalysisVisualization from './AnalysisVisualization';
+import { API_URL } from '../config';
 
 function Analysis({ selectedStock }) {
   const [analysis, setAnalysis] = useState(null);
@@ -24,7 +25,7 @@ function Analysis({ selectedStock }) {
       try {
         setIsLoading(true);
         setError(null);
-        const response = await axios.get(`http://localhost:8080/api/stocks/${selectedStock.symbol}/analysis`);
+        const response = await axios.get(`${API_URL}/api/stocks/${selectedStock.symbol}/analysis`);
         if (isMounted) {
           setAnalysis(response.data);
           

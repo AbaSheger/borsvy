@@ -7,6 +7,7 @@ import Analysis from './components/Analysis';
 import WelcomeScreen from './components/WelcomeScreen';
 import { ConfigProvider } from 'antd';
 import './App.css';
+import { API_URL } from './config';
 
 function App() {
   const [stocks, setStocks] = useState([]);
@@ -20,7 +21,7 @@ function App() {
   useEffect(() => {
     const fetchFavorites = async () => {
       try {
-        const favoritesResponse = await axios.get('http://localhost:8080/api/favorites');
+        const favoritesResponse = await axios.get(`${API_URL}/api/favorites`);
         setFavorites(favoritesResponse.data);
       } catch (err) {
         console.error('Error fetching favorites:', err);
@@ -55,10 +56,10 @@ function App() {
     try {
       const isFavorite = favorites.some(f => f.symbol === stock.symbol);
       if (isFavorite) {
-        await axios.delete(`http://localhost:8080/api/favorites/${stock.symbol}`);
+        await axios.delete(`${API_URL}/api/favorites/${stock.symbol}`);
         setFavorites(favorites.filter(f => f.symbol !== stock.symbol));
       } else {
-        await axios.post('http://localhost:8080/api/favorites', stock);
+        await axios.post(`${API_URL}/api/favorites`, stock);
         setFavorites([...favorites, stock]);
       }
       setFavoritesError(null);

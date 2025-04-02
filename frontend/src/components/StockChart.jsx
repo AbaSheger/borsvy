@@ -4,6 +4,7 @@ import axios from 'axios';
 // Import Chart.js components - you'll need to install these packages
 // npm install react-chartjs-2 chart.js
 import { Line } from 'react-chartjs-2';
+import { API_URL } from '../config';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -42,7 +43,7 @@ function StockChart({ symbol, interval, theme = 'dark' }) {
       try {
         setIsLoading(true);
         setError(null);
-        const response = await axios.get(`http://localhost:8080/api/stocks/${symbol}/price-history?interval=${interval}`);
+        const response = await axios.get(`${API_URL}/api/stocks/${symbol}/price-history?interval=${interval}`);
         
         // Debug logging
         console.log('Raw API response:', response);

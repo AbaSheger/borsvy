@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDebounce } from '../hooks/useDebounce';
 import axios from 'axios';
+import { API_URL } from '../config';
 
 function SearchBar({ onSearch }) {
   const [query, setQuery] = useState('');
@@ -26,7 +27,7 @@ function SearchBar({ onSearch }) {
         
         // If specific enough (3+ chars), try the exact search first
         if (debouncedQuery.length >= 3) {
-          const response = await axios.get(`http://localhost:8080/api/stocks/search?query=${encodeURIComponent(debouncedQuery)}`);
+          const response = await axios.get(`${API_URL}/api/stocks/search?query=${encodeURIComponent(debouncedQuery)}`);
           results = response.data;
         }
         
@@ -34,7 +35,7 @@ function SearchBar({ onSearch }) {
         if ((searchTerms.length > 1 || results.length === 0) && searchTerms.some(term => term.length >= 2)) {
           for (const term of searchTerms) {
             if (term.length >= 2) { // Only search terms with at least 2 characters
-              const termResponse = await axios.get(`http://localhost:8080/api/stocks/search?query=${encodeURIComponent(term)}`);
+              const termResponse = await axios.get(`${API_URL}/api/stocks/search?query=${encodeURIComponent(term)}`);
               
               // Merge and remove duplicates
               if (termResponse.data.length > 0) {
@@ -59,7 +60,7 @@ function SearchBar({ onSearch }) {
           
           for (const symbol of matchingCommon) {
             try {
-              const symbolResponse = await axios.get(`http://localhost:8080/api/stocks/search?query=${encodeURIComponent(symbol)}`);
+              const symbolResponse = await axios.get(`${API_URL}/api/stocks/search?query=${encodeURIComponent(symbol)}`);
               results = [...results, ...symbolResponse.data];
             } catch (e) {
               console.error(`Error fetching common stock ${symbol}:`, e);

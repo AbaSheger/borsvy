@@ -4,7 +4,7 @@ import axios from 'axios';
 import { InfoCircleOutlined, SearchOutlined, LoadingOutlined, FireOutlined, StarOutlined } from '@ant-design/icons';
 import { Tooltip, Input, Spin, ConfigProvider } from 'antd';
 import debounce from 'lodash/debounce';
-import API_URL from '../config';
+import { API_URL } from '../config';
 
 function StockSearch({ onSearch, isLoading, popularStocks }) {
   const [query, setQuery] = useState('');
