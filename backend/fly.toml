@@ -1,0 +1,36 @@
+# fly.toml app configuration file generated for borsvy on 2025-04-01T22:09:22+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = "borsvy"
+primary_region = "arn"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  SPRING_PROFILES_ACTIVE = "prod"
+  SERVER_ADDRESS = "0.0.0.0"
+  SERVER_PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024
+
+[checks]
+  [checks.alive]
+    type = "tcp"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+    port = 8080
