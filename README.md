@@ -16,8 +16,9 @@ A web-based stock analysis platform built with React, Spring Boot, and multiple 
   - Hikari connection pool for database connections
   - Detailed logging configuration
 - **Database**: 
-  - Development: H2 Database (file-based)
-  - Production: PostgreSQL with SSL disabled
+  - H2 Database (file-based) for both development and production
+  - Persistent data storage
+  - Automatic schema updates
 - **External APIs**: 
   - Finnhub API for real-time stock data
   - Polygon.io for historical data
@@ -30,7 +31,6 @@ A web-based stock analysis platform built with React, Spring Boot, and multiple 
 - Node.js (v18 or higher)
 - Java 17 or higher
 - Docker
-- PostgreSQL (for production)
 
 ## Running the Application
 
@@ -65,37 +65,23 @@ The frontend will be available at http://localhost:3000
 cd backend
 ```
 
-2. For development, the H2 database is automatically configured. For production, create an `application.properties` file with the following configuration:
+2. The H2 database is automatically configured. The application uses the following database configuration:
 ```properties
-# Development (H2) Database settings
+# Database settings
 spring.datasource.url=jdbc:h2:file:./data/borsvy;DB_CLOSE_ON_EXIT=FALSE
 spring.datasource.driverClassName=org.h2.Driver
 spring.datasource.username=sa
-spring.datasource.password=sa
+spring.datasource.password=password
 spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
 spring.jpa.hibernate.ddl-auto=update
-spring.h2.console.enabled=true
-spring.h2.console.path=/h2-console
-
-# Production (PostgreSQL) Database settings
-# spring.datasource.driver-class-name=org.postgresql.Driver
-# spring.datasource.url=${DATABASE_URL}
-# spring.datasource.username=${DATABASE_USERNAME}
-# spring.datasource.password=${DATABASE_PASSWORD}
-# spring.datasource.hikari.ssl-mode=disable
-# spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
-# spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.h2.console.enabled=false  # Disabled in production for security
 
 # Server settings
-# server.tomcat.max-threads=200
-# server.tomcat.min-spare-threads=20
-# server.tomcat.uri-encoding=UTF-8
-
-# Logging settings
-# logging.level.com.borsvy=DEBUG
-# logging.level.org.springframework.web=DEBUG
-# logging.level.org.hibernate.SQL=DEBUG
-# logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
+server.port=${PORT:8080}
+server.tomcat.max-threads=200
+server.tomcat.min-spare-threads=20
+server.tomcat.uri-encoding=UTF-8
 
 # API Keys
 finnhub.api.key=${FINNHUB_API_KEY}
@@ -144,7 +130,7 @@ To use the application with full functionality, you'll need:
 3. A Polygon.io API key (https://polygon.io/)
 4. A Hugging Face API key (https://huggingface.co/)
 
-Add these keys to the `application.properties` file in the backend.
+Add these keys to your environment variables or the application configuration.
 
 ## Environment Variables
 
@@ -152,14 +138,11 @@ Add these keys to the `application.properties` file in the backend.
 - `VITE_API_URL`: The URL of the backend API (default: https://borsvy-backend-borsvy-295875c6.koyeb.app)
 
 ### Backend
-- `spring.datasource.url`: PostgreSQL connection URL (production)
-- `spring.datasource.username`: Database username (production)
-- `spring.datasource.password`: Database password (production)
-- `finnhub.api.key`: Finnhub API key
-- `serpapi.api.key`: SerpAPI key
-- `polygon.api.key`: Polygon.io API key
-- `huggingface.api.key`: Hugging Face API key
 - `PORT`: Server port (default: 8080)
+- `FINNHUB_API_KEY`: Finnhub API key
+- `SERPAPI_API_KEY`: SerpAPI key
+- `POLYGON_API_KEY`: Polygon.io API key
+- `HUGGINGFACE_API_KEY`: Hugging Face API key
 
 ## License
 
