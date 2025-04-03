@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/',  // Set base URL to root
+  base: './',  // Use relative paths
   server: {
     port: 3000,
     host: '0.0.0.0'
@@ -15,25 +15,22 @@ export default defineConfig({
     allowedHosts: ['.koyeb.app']
   },
   build: {
-    target: 'esnext',
     outDir: 'dist',
     assetsDir: 'assets',
-    sourcemap: false,
-    minify: 'terser',
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          antd: ['antd', '@ant-design/icons'],
-          charts: ['chart.js', 'react-chartjs-2', 'recharts']
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'antd-vendor': ['antd', '@ant-design/icons'],
+          'chart-vendor': ['chart.js', 'react-chartjs-2', 'recharts'],
+          'utils-vendor': ['axios', 'lodash']
         },
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash].[ext]'
       }
     }
-  },
-  optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'antd', '@ant-design/icons', 'chart.js', 'react-chartjs-2', 'recharts']
   }
 })
