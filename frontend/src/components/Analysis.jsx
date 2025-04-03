@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
-import PropTypes from 'prop-types';
+import { useParams } from 'react-router-dom';
+import { Card, Spin, message } from 'antd';
 import axios from 'axios';
+import { axiosConfig } from '../config';
 import StockChart from './StockChart';
 import PeerComparison from './PeerComparison';
 import NewsCard from './NewsCard';
 import AnalysisVisualization from './AnalysisVisualization';
-import { API_URL } from '../config';
 
-function Analysis({ selectedStock }) {
+const Analysis = () => {
+  const { symbol } = useParams();
   const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [interval, setInterval] = useState('1D');
@@ -17,54 +20,39 @@ function Analysis({ selectedStock }) {
   const [activeInterval, setActiveInterval] = useState('1D');
 
   useEffect(() => {
-    let isMounted = true;
-
     const fetchAnalysis = async () => {
-      if (!selectedStock?.symbol) return;
-
       try {
-        setIsLoading(true);
-        setError(null);
-        const response = await axios.get(`${API_URL}/api/stocks/${selectedStock.symbol}/analysis`);
-        if (isMounted) {
-          setAnalysis(response.data);
-          
-          // Extract news from the response
-          if (response.data.recentNews) {
-            console.log('News data received:', response.data.recentNews);
-            // Ensure each news article has all required fields
-            const formattedNews = response.data.recentNews.map(article => ({
-              title: article.title || 'No title',
-              url: article.url || '#',
-              source: article.source || 'Unknown source',
-              date: article.date || 'No date',
-              summary: article.summary || 'No summary available',
-              thumbnail: article.thumbnail || 'https://placehold.co/150x150/1a1a1a/666666/png?text=No+Image'
-            }));
-            setNews(formattedNews);
-          } else {
-            console.log('No news data in response:', response.data);
-            setNews([]);
-          }
+        setLoading(true);
+        const response = await axios.get(`/api/stocks/${symbol}/analysis`, axiosConfig);
+        setAnalysis(response.data);
+        
+        // Extract news from the response
+        if (response.data.recentNews) {
+          console.log('News data received:', response.data.recentNews);
+          // Ensure each news article has all required fields
+          const formattedNews = response.data.recentNews.map(article => ({
+            title: article.title || 'No title',
+            url: article.url || '#',
+            source: article.source || 'Unknown source',
+            date: article.date || 'No date',
+            summary: article.summary || 'No summary available',
+            thumbnail: article.thumbnail || 'https://placehold.co/150x150/1a1a1a/666666/png?text=No+Image'
+          }));
+          setNews(formattedNews);
+        } else {
+          console.log('No news data in response:', response.data);
+          setNews([]);
         }
-      } catch (err) {
-        console.error('Analysis error:', err);
-        if (isMounted) {
-          setError('Failed to fetch analysis data');
-        }
+      } catch (error) {
+        message.error('Failed to fetch analysis');
+        console.error('Error fetching analysis:', error);
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        setLoading(false);
       }
     };
 
     fetchAnalysis();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedStock?.symbol, activeInterval]);
+  }, [symbol]);
 
   const intervals = [
     { value: '1D', label: '1D' },
@@ -76,21 +64,21 @@ function Analysis({ selectedStock }) {
 
   // Calculate change percentage
   const calculateChangePercentage = () => {
-    if (selectedStock?.previousClose && selectedStock?.price) {
-      return ((selectedStock.price - selectedStock.previousClose) / selectedStock.previousClose * 100).toFixed(2);
+    if (analysis?.previousClose && analysis?.price) {
+      return ((analysis.price - analysis.previousClose) / analysis.previousClose * 100).toFixed(2);
     }
-    return selectedStock?.changePercent?.toFixed(2) || 'N/A';
+    return analysis?.changePercent?.toFixed(2) || 'N/A';
   };
 
   const changePercentage = calculateChangePercentage();
   const isPositiveChange = parseFloat(changePercentage) >= 0;
 
-  if (!selectedStock) {
-    return (
-      <div className="bg-[#1a1a1a] rounded-xl shadow-sm p-6 border border-[#333333]">
-        <p className="text-gray-400 text-center font-medium">Select a stock to view analysis</p>
-      </div>
-    );
+  if (loading) {
+    return <Spin size="large" />;
+  }
+
+  if (!analysis) {
+    return <div>No analysis available</div>;
   }
 
   return (
@@ -98,8 +86,8 @@ function Analysis({ selectedStock }) {
       <div className="bg-[#1a1a1a] rounded-xl shadow-sm p-6 border border-[#333333]">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-[#e6e6e6]">{selectedStock.name}</h2>
-            <p className="text-gray-400 mt-1">{selectedStock.symbol}</p>
+            <h2 className="text-2xl font-bold text-[#e6e6e6]">{analysis.name}</h2>
+            <p className="text-gray-400 mt-1">{symbol}</p>
           </div>
           <div className="flex space-x-2">
             {intervals.map(interval => (
@@ -121,7 +109,7 @@ function Analysis({ selectedStock }) {
         {/* Chart Section */}
         <div className="h-[400px] mb-6 bg-[#1a1a1a] border border-[#333333] rounded-lg overflow-hidden">
           <StockChart 
-            symbol={selectedStock.symbol} 
+            symbol={symbol} 
             interval={activeInterval} 
             theme="dark"
           />
@@ -131,7 +119,7 @@ function Analysis({ selectedStock }) {
           <div className="bg-[#262626] rounded-lg p-4 border border-[#333333]">
             <p className="text-sm font-medium text-gray-400">Current Price</p>
             <p className="text-2xl font-bold text-[#e6e6e6]">
-              ${selectedStock.price?.toFixed(2) || 'N/A'}
+              ${analysis.price?.toFixed(2) || 'N/A'}
             </p>
           </div>
           
@@ -151,14 +139,14 @@ function Analysis({ selectedStock }) {
           <div className="bg-[#262626] rounded-lg p-4 border border-[#333333]">
             <p className="text-sm font-medium text-gray-400">Volume</p>
             <p className="text-2xl font-bold text-[#e6e6e6]">
-              {selectedStock.volume ? formatNumber(selectedStock.volume) : 'N/A'}
+              {analysis.volume ? formatNumber(analysis.volume) : 'N/A'}
             </p>
           </div>
           
           <div className="bg-[#262626] rounded-lg p-4 border border-[#333333]">
             <p className="text-sm font-medium text-gray-400">Market Cap</p>
             <p className="text-2xl font-bold text-[#e6e6e6]">
-              {selectedStock.marketCap ? formatMarketCap(selectedStock.marketCap) : 'N/A'}
+              {analysis.marketCap ? formatMarketCap(analysis.marketCap) : 'N/A'}
             </p>
           </div>
         </div>
@@ -201,13 +189,13 @@ function Analysis({ selectedStock }) {
               </div>
             </>
           ) : (
-            <PeerComparison symbol={selectedStock.symbol} />
+            <PeerComparison symbol={symbol} />
           )}
         </div>
       </div>
     </div>
   );
-}
+};
 
 // Helper functions for formatting
 function formatNumber(num) {
@@ -232,19 +220,5 @@ function formatMarketCap(marketCap) {
   }
   return '$' + marketCap.toFixed(2) + ' M';
 }
-
-Analysis.propTypes = {
-  selectedStock: PropTypes.shape({
-    symbol: PropTypes.string.isRequired,
-    name: PropTypes.string,
-    price: PropTypes.number,
-    change: PropTypes.number,
-    changePercent: PropTypes.number,
-    previousClose: PropTypes.number,
-    volume: PropTypes.number,
-    marketCap: PropTypes.number,
-    industry: PropTypes.string,
-  }),
-};
 
 export default Analysis;

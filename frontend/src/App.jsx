@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Layout, message } from 'antd';
 import axios from 'axios';
+import { axiosConfig } from './config';
 import StockSearch from './components/StockSearch';
 import StockList from './components/StockList';
 import Favorites from './components/Favorites';
 import Analysis from './components/Analysis';
 import WelcomeScreen from './components/WelcomeScreen';
-import { ConfigProvider } from 'antd';
+import StockChart from './components/StockChart';
 import './App.css';
 import { API_URL } from './config';
+
+const { Header, Content } = Layout;
 
 function App() {
   const [stocks, setStocks] = useState([]);
@@ -16,23 +21,20 @@ function App() {
   const [error, setError] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [favoritesError, setFavoritesError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // Only fetch favorites on component mount
-  useEffect(() => {
-    const fetchFavorites = async () => {
-      try {
-        const favoritesResponse = await axios.get(`${API_URL}/api/favorites`);
-        setFavorites(favoritesResponse.data);
-      } catch (err) {
-        console.error('Error fetching favorites:', err);
-        if (err.response?.status === 403 || err.message.includes('Network Error')) {
-          setError('Cannot connect to the backend server. Please ensure it is running.');
-        }
-      }
-    };
-
-    fetchFavorites();
-  }, []);
+  const fetchFavorites = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get('/api/favorites', axiosConfig);
+      setFavorites(response.data);
+    } catch (error) {
+      message.error('Failed to fetch favorites');
+      console.error('Error fetching favorites:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSearch = async (searchResults) => {
     try {
@@ -54,132 +56,38 @@ function App() {
 
   const toggleFavorite = async (stock) => {
     try {
-      const isFavorite = favorites.some(f => f.symbol === stock.symbol);
+      const isFavorite = favorites.some(fav => fav.symbol === stock.symbol);
       if (isFavorite) {
-        await axios.delete(`${API_URL}/api/favorites/${stock.symbol}`);
-        setFavorites(favorites.filter(f => f.symbol !== stock.symbol));
+        await axios.delete(`/api/favorites/${stock.symbol}`, axiosConfig);
+        message.success('Removed from favorites');
       } else {
-        await axios.post(`${API_URL}/api/favorites`, stock);
-        setFavorites([...favorites, stock]);
+        await axios.post('/api/favorites', stock, axiosConfig);
+        message.success('Added to favorites');
       }
-      setFavoritesError(null);
-    } catch (err) {
-      console.error('Error toggling favorite:', err);
-      setFavoritesError('Failed to update favorites. Please try again.');
+      fetchFavorites();
+    } catch (error) {
+      message.error('Failed to update favorites');
+      console.error('Error updating favorites:', error);
     }
   };
 
+  useEffect(() => {
+    fetchFavorites();
+  }, []);
+
   return (
-    <ConfigProvider
-      theme={{
-        token: {
-          colorBgContainer: '#1a1a1a',
-          colorBgLayout: '#111111',
-          colorText: '#e6e6e6',
-          colorTextSecondary: '#a3a3a3',
-          colorBorder: '#333333',
-          colorPrimary: '#3b82f6',
-          colorPrimaryHover: '#60a5fa',
-          colorPrimaryActive: '#2563eb',
-          colorBgElevated: '#1a1a1a',
-          colorBgSpotlight: '#262626',
-          colorBgMask: 'rgba(0, 0, 0, 0.75)',
-        },
-        components: {
-          Card: {
-            colorBgContainer: '#1a1a1a',
-            colorBorder: '#333333',
-          },
-          Table: {
-            colorBgContainer: '#1a1a1a',
-            colorBgHeader: '#262626',
-            colorBorder: '#333333',
-            colorText: '#e6e6e6',
-            colorTextSecondary: '#a3a3a3',
-          },
-          Button: {
-            colorBgContainer: '#262626',
-            colorBorder: '#333333',
-            colorText: '#e6e6e6',
-            colorPrimary: '#3b82f6',
-            colorPrimaryHover: '#60a5fa',
-            colorPrimaryActive: '#2563eb',
-          },
-          Input: {
-            colorBgContainer: '#262626',
-            colorBorder: '#333333',
-            colorText: '#e6e6e6',
-            colorTextPlaceholder: '#666666',
-          },
-          Select: {
-            colorBgContainer: '#262626',
-            colorBorder: '#333333',
-            colorText: '#e6e6e6',
-            colorTextPlaceholder: '#666666',
-          },
-          Modal: {
-            colorBgContainer: '#1a1a1a',
-            colorBgMask: 'rgba(0, 0, 0, 0.75)',
-            colorText: '#e6e6e6',
-            colorTextSecondary: '#a3a3a3',
-          },
-          Drawer: {
-            colorBgContainer: '#1a1a1a',
-            colorBgMask: 'rgba(0, 0, 0, 0.75)',
-            colorText: '#e6e6e6',
-            colorTextSecondary: '#a3a3a3',
-          },
-          Tooltip: {
-            colorBgContainer: '#262626',
-            colorText: '#e6e6e6',
-          },
-          Dropdown: {
-            colorBgContainer: '#1a1a1a',
-            colorText: '#e6e6e6',
-          },
-          Menu: {
-            colorBgContainer: '#1a1a1a',
-            colorText: '#e6e6e6',
-            colorTextSecondary: '#a3a3a3',
-          },
-          Tabs: {
-            colorBgContainer: '#1a1a1a',
-            colorText: '#e6e6e6',
-            colorTextSecondary: '#a3a3a3',
-          },
-          Tag: {
-            colorBgContainer: '#262626',
-            colorText: '#e6e6e6',
-            colorBorder: '#333333',
-          },
-          Alert: {
-            colorBgContainer: '#262626',
-            colorText: '#e6e6e6',
-            colorTextSecondary: '#a3a3a3',
-          },
-          Badge: {
-            colorBgContainer: '#262626',
-            colorText: '#e6e6e6',
-          },
-          Progress: {
-            colorBgContainer: '#262626',
-            colorText: '#e6e6e6',
-          },
-          Timeline: {
-            colorBgContainer: '#1a1a1a',
-            colorText: '#e6e6e6',
-            colorTextSecondary: '#a3a3a3',
-          },
-          Spin: {
-            colorBgContainer: '#1a1a1a',
-            colorText: '#e6e6e6',
-          },
-        },
-      }}
-    >
-      <div className="min-h-screen bg-[#111111]">
-        <div className="container mx-auto px-4 py-8">
-          <StockSearch onSearch={handleSearch} isLoading={isLoading} />
+    <Router>
+      <Layout className="app-layout">
+        <Header className="app-header">
+          <h1>Stock Analysis Dashboard</h1>
+        </Header>
+        <Content className="app-content">
+          <Routes>
+            <Route path="/" element={<StockSearch onSearch={handleSearch} isLoading={isLoading} onToggleFavorite={toggleFavorite} favorites={favorites} />} />
+            <Route path="/favorites" element={<Favorites favorites={favorites} onToggleFavorite={toggleFavorite} loading={loading} />} />
+            <Route path="/analysis/:symbol" element={<Analysis />} />
+            <Route path="/chart/:symbol" element={<StockChart />} />
+          </Routes>
           
           {error && (
             <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
@@ -223,9 +131,9 @@ function App() {
               </div>
             </div>
           )}
-        </div>
-      </div>
-    </ConfigProvider>
+        </Content>
+      </Layout>
+    </Router>
   );
 }
 

@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
-import { InfoCircleOutlined, SearchOutlined, LoadingOutlined, FireOutlined, StarOutlined } from '@ant-design/icons';
-import { Tooltip, Input, Spin, ConfigProvider } from 'antd';
+import { InfoCircleOutlined, SearchOutlined, LoadingOutlined, FireOutlined, StarOutlined, StarFilled } from '@ant-design/icons';
+import { Tooltip, Input, Spin, ConfigProvider, List, Card, Button, message } from 'antd';
 import debounce from 'lodash/debounce';
-import { API_URL } from '../config';
+import { API_URL, axiosConfig } from '../config';
+import { useNavigate } from 'react-router-dom';
 
-function StockSearch({ onSearch, isLoading, popularStocks }) {
+function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, favorites }) {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -14,6 +15,7 @@ function StockSearch({ onSearch, isLoading, popularStocks }) {
   const [isSearching, setIsSearching] = useState(false);
   const [lastSearchTime, setLastSearchTime] = useState(0);
   const searchRef = useRef(null);
+  const navigate = useNavigate();
 
   // Debounced search function with rate limiting
   const debouncedSearch = useRef(
@@ -32,7 +34,7 @@ function StockSearch({ onSearch, isLoading, popularStocks }) {
 
       try {
         setIsSearching(true);
-        const response = await axios.get(`${API_URL}/api/stocks/search?query=${searchQuery}`);
+        const response = await axios.get(`${API_URL}/api/stocks/search?query=${searchQuery}`, axiosConfig);
         setSuggestions(response.data);
         setLastSearchTime(Date.now());
       } catch (error) {
@@ -70,7 +72,7 @@ function StockSearch({ onSearch, isLoading, popularStocks }) {
 
     try {
       setIsSearching(true);
-      const response = await axios.get(`${API_URL}/api/stocks/search?query=${query}`);
+      const response = await axios.get(`${API_URL}/api/stocks/search?query=${query}`, axiosConfig);
       onSearch(response.data);
       setShowSuggestions(false);
       setLastSearchTime(Date.now());
@@ -134,6 +136,10 @@ function StockSearch({ onSearch, isLoading, popularStocks }) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleStockClick = (symbol) => {
+    navigate(`/analysis/${symbol}`);
+  };
 
   return (
     <div className="relative" ref={searchRef}>
@@ -262,6 +268,37 @@ function StockSearch({ onSearch, isLoading, popularStocks }) {
             <p className="text-gray-400 text-sm">Stay informed with comprehensive market research</p>
           </div>
         </div>
+
+        {/* Search Results */}
+        <div className="mt-16">
+          <List
+            grid={{ gutter: 16, column: 4 }}
+            dataSource={isLoading ? [] : searchResults}
+            renderItem={(stock) => (
+              <List.Item>
+                <Card
+                  hoverable
+                  onClick={() => handleStockClick(stock.symbol)}
+                  actions={[
+                    <Button
+                      type="text"
+                      icon={favorites.some(f => f.symbol === stock.symbol) ? <StarFilled /> : <StarOutlined />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleFavorite(stock);
+                      }}
+                    />
+                  ]}
+                >
+                  <Card.Meta
+                    title={stock.symbol}
+                    description={stock.name}
+                  />
+                </Card>
+              </List.Item>
+            )}
+          />
+        </div>
       </div>
     </div>
   );
@@ -270,7 +307,9 @@ function StockSearch({ onSearch, isLoading, popularStocks }) {
 StockSearch.propTypes = {
   onSearch: PropTypes.func.isRequired,
   isLoading: PropTypes.bool,
-  popularStocks: PropTypes.array
+  popularStocks: PropTypes.array,
+  onToggleFavorite: PropTypes.func.isRequired,
+  favorites: PropTypes.array.isRequired
 };
 
 export default StockSearch;
