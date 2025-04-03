@@ -14,8 +14,12 @@ export default defineConfig({
     allowedHosts: ['.koyeb.app']
   },
   build: {
+    target: 'esnext',
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+    minify: 'terser',
     rollupOptions: {
-      external: ['@rollup/rollup-linux-x64-gnu'],
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
@@ -24,5 +28,8 @@ export default defineConfig({
         }
       }
     }
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom', 'antd', '@ant-design/icons', 'chart.js', 'react-chartjs-2', 'recharts']
   }
 })
