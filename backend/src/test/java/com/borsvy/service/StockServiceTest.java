@@ -134,7 +134,7 @@ public class StockServiceTest {
     void testGetPriceHistory() {
         when(stockRepository.findById("AAPL")).thenReturn(Optional.of(testStock));
         
-        List<StockPrice> priceHistory = stockService.getPriceHistory("AAPL", "1d");
+        List<StockPrice> priceHistory = stockService.getHistoricalData("AAPL", "1d");
         assertFalse(priceHistory.isEmpty());
         assertEquals("AAPL", priceHistory.get(0).getSymbol());
         verify(stockRepository).findById("AAPL");
