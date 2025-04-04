@@ -4,8 +4,6 @@ services:
     working_directory: frontend
     build:
       command: npm install && npm run build
-    run:
-      command: npm run preview
     ports:
       - port: 3000
         protocol: http
@@ -19,8 +17,6 @@ services:
     working_directory: backend
     build:
       command: mvn clean package -DskipTests
-    run:
-      command: java -jar target/backend-0.0.1-SNAPSHOT.jar
     ports:
       - port: 8080
         protocol: http
