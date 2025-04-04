@@ -16,11 +16,7 @@ services:
         value: ${API_URL}
 
   - name: backend
-    working_directory: backend
-    build:
-      command: mvn clean package -DskipTests
-    run:
-      command: java -jar target/backend-0.0.1-SNAPSHOT.jar
+    dockerfile: backend/Dockerfile
     ports:
       - port: 8080
         protocol: http
