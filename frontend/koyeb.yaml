@@ -1,0 +1,16 @@
+name: borsvy-frontend
+services:
+  - name: frontend
+    working_directory: /workspace
+    build:
+      command: npm install && npm run build
+    run:
+      command: npm run preview
+    ports:
+      - port: 3000
+        protocol: http
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: VITE_API_URL
+        value: ${API_URL} 
