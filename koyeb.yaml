@@ -1,9 +1,24 @@
-name: borsvy-backend
+name: borsvy
 services:
-  - name: backend
-    working_directory: /workspace/backend
+  - name: frontend
+    working_directory: frontend
     build:
-      command: mvn clean package -DskipTests -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
+      command: npm install && npm run build
+    run:
+      command: npm run preview
+    ports:
+      - port: 3000
+        protocol: http
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: VITE_API_URL
+        value: ${API_URL}
+
+  - name: backend
+    working_directory: backend
+    build:
+      command: mvn clean package -DskipTests
     run:
       command: java -jar target/backend-0.0.1-SNAPSHOT.jar
     ports:
@@ -19,6 +34,4 @@ services:
       - name: SPRING_DATASOURCE_PASSWORD
         value: ${POSTGRESQL_PASSWORD}
       - name: JWT_SECRET
-        value: ${JWT_SECRET}
-      - name: MAVEN_OPTS
-        value: "-Dmaven.repo.local=/tmp/m2/repository" 
+        value: ${JWT_SECRET} 
