@@ -16,18 +16,16 @@ services:
         value: ${API_URL}
 
   - name: backend
-    dockerfile: backend/Dockerfile
+    working_directory: backend
+    build:
+      command: mvn clean package -DskipTests
+    run:
+      command: java -jar target/backend-0.0.1-SNAPSHOT.jar
     ports:
       - port: 8080
         protocol: http
     env:
       - name: SPRING_PROFILES_ACTIVE
-        value: production
-      - name: SPRING_DATASOURCE_URL
-        value: ${POSTGRESQL_URL}
-      - name: SPRING_DATASOURCE_USERNAME
-        value: ${POSTGRESQL_USERNAME}
-      - name: SPRING_DATASOURCE_PASSWORD
-        value: ${POSTGRESQL_PASSWORD}
-      - name: JWT_SECRET
-        value: ${JWT_SECRET} 
+        value: prod
+      - name: SERVER_PORT
+        value: "8080" 
