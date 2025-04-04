@@ -1,7 +1,7 @@
 name: borsvy-backend
 services:
   - name: backend
-    working_directory: /workspace
+    working_directory: /workspace/backend
     build:
       command: mvn clean package -DskipTests -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
     run:

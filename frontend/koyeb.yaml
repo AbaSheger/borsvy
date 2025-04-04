@@ -1,7 +1,7 @@
 name: borsvy-frontend
 services:
   - name: frontend
-    working_directory: /workspace
+    working_directory: /workspace/frontend
     build:
       command: npm install && npm run build
     run:
