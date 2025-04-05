@@ -4,8 +4,8 @@ COPY package*.json ./
 # Install all dependencies including dev dependencies needed for build
 RUN npm ci
 COPY . .
-# Environment variable to reduce memory usage during build
-ENV NODE_OPTIONS="--max-old-space-size=512"
+# Environment variable to increase memory limit for build
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN npm run build
 
 FROM nginx:alpine
