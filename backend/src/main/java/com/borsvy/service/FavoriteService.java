@@ -4,6 +4,10 @@ import com.borsvy.model.Favorite;
 import com.borsvy.repository.FavoriteRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,6 +15,8 @@ import java.util.Optional;
 
 @Service
 public class FavoriteService {
+
+    private static final Logger logger = LoggerFactory.getLogger(FavoriteService.class);
 
     @Autowired
     private FavoriteRepository favoriteRepository;
@@ -25,6 +31,7 @@ public class FavoriteService {
     /**
      * Add a stock to favorites
      */
+    @Transactional
     public Favorite addFavorite(Favorite favorite) {
         // Set the current time if not provided
         if (favorite.getAddedAt() == null) {
@@ -38,15 +45,33 @@ public class FavoriteService {
     /**
      * Remove a stock from favorites
      */
+    @Transactional
     public boolean removeFavorite(String symbol) {
-        // Check if favorite exists
-        if (!favoriteRepository.existsById(symbol)) {
-            return false;
+        try {
+            // Get the favorite first to ensure we have the latest version
+            Optional<Favorite> favorite = favoriteRepository.findById(symbol);
+            if (favorite.isEmpty()) {
+                return false;
+            }
+            
+            // Delete from database
+            favoriteRepository.delete(favorite.get());
+            return true;
+        } catch (ObjectOptimisticLockingFailureException e) {
+            logger.warn("Concurrent modification detected while removing favorite: {}. Retrying...", symbol);
+            // If we get a concurrent modification, try one more time
+            try {
+                Optional<Favorite> favorite = favoriteRepository.findById(symbol);
+                if (favorite.isEmpty()) {
+                    return false;
+                }
+                favoriteRepository.delete(favorite.get());
+                return true;
+            } catch (Exception retryEx) {
+                logger.error("Failed to remove favorite {} after retry: {}", symbol, retryEx.getMessage());
+                return false;
+            }
         }
-        
-        // Delete from database
-        favoriteRepository.deleteById(symbol);
-        return true;
     }
     
     /**

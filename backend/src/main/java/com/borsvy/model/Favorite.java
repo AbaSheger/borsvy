@@ -3,6 +3,7 @@ package com.borsvy.model;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 
 @Entity
@@ -16,6 +17,9 @@ public class Favorite {
     private double change;
     private double changePercent;
     private LocalDateTime addedAt;
+    
+    @Version
+    private Long version;
 
     // Default constructor
     public Favorite() {
@@ -78,5 +82,13 @@ public class Favorite {
 
     public void setAddedAt(LocalDateTime addedAt) {
         this.addedAt = addedAt;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }
