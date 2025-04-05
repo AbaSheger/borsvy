@@ -1,8 +1,8 @@
 FROM node:18-alpine as builder
 WORKDIR /app
 COPY package*.json ./
-# Use npm ci for more efficient and reproducible builds
-RUN npm ci --only=production
+# Install all dependencies including dev dependencies needed for build
+RUN npm ci
 COPY . .
 # Environment variable to reduce memory usage during build
 ENV NODE_OPTIONS="--max-old-space-size=512"
