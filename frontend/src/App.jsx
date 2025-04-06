@@ -50,19 +50,14 @@ const SidebarNavigation = ({ collapsed, onClose }) => {
           key: 'favorites',
           icon: <StarOutlined />,
           label: <Link to="/favorites">Favorites</Link>,
-        },
-        {
-          key: 'analysis',
-          icon: <LineChartOutlined />,
-          label: "Latest Analysis",
-          disabled: true,
         }
       ]}
     />
   );
 };
 
-function App() {
+// Create a separate component for the app content that can use router hooks
+const AppContent = () => {
   const [stocks, setStocks] = useState([]);
   const [selectedStock, setSelectedStock] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -71,6 +66,14 @@ function App() {
   const [favoritesError, setFavoritesError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 768);
+  const location = useLocation(); // This is now safe to use here
+  
+  // Clear selected stock when navigating to favorites page
+  useEffect(() => {
+    if (location.pathname === '/favorites') {
+      setSelectedStock(null);
+    }
+  }, [location.pathname]);
 
   // Sidebar collapsed state handler
   const toggleSidebar = () => {
@@ -142,70 +145,71 @@ function App() {
   }, []);
 
   return (
-    <Router future={routerFutureConfig}>
-      <Layout className="min-h-screen">
-        <Sider 
-          trigger={null}
-          collapsible
-          collapsed={sidebarCollapsed}
-          collapsedWidth={0}
-          width={250}
-          className="fixed h-full z-30 left-0 top-0 bg-[#1a1a1a] border-r border-[#333333]"
-        >
-          <div className="p-4 h-16 flex items-center border-b border-[#333333]">
-            <Link to="/" className="flex items-center">
-              <span className="text-2xl font-bold text-blue-400">Bö<span className="text-yellow-400">rs</span>vy</span>
-            </Link>
-          </div>
-          <SidebarNavigation collapsed={sidebarCollapsed} onClose={() => setSidebarCollapsed(true)} />
-        </Sider>
+    <Layout className="min-h-screen">
+      <Sider 
+        trigger={null}
+        collapsible
+        collapsed={sidebarCollapsed}
+        collapsedWidth={0}
+        width={250}
+        className="fixed h-full z-30 left-0 top-0 bg-[#1a1a1a] border-r border-[#333333]"
+      >
+        <div className="p-4 h-16 flex items-center border-b border-[#333333]">
+          <Link to="/" className="flex items-center">
+            <span className="text-2xl font-bold text-blue-400">Bö<span className="text-yellow-400">rs</span>vy</span>
+          </Link>
+        </div>
+        <SidebarNavigation collapsed={sidebarCollapsed} onClose={() => setSidebarCollapsed(true)} />
+      </Sider>
 
-        <Layout className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-[250px]'}`}>
-          <Header className="bg-[#1a1a1a] border-b border-[#333333] sticky top-0 z-20 flex items-center h-16 px-4">
-            <button
-              onClick={toggleSidebar}
-              className="mr-4 text-gray-400 hover:text-white transition-colors"
-            >
-              {sidebarCollapsed ? <MenuOutlined /> : <CloseOutlined />}
-            </button>
-            <div className="flex-1 flex justify-between items-center">
-              <div className="md:hidden">
-                {!sidebarCollapsed && <span className="text-lg font-bold text-blue-400">Bö<span className="text-yellow-400">rs</span>vy</span>}
-              </div>
-              <div className="flex items-center">
-                {/* Optional: Add any header elements here */}
-              </div>
+      <Layout className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-[250px]'}`}>
+        <Header className="bg-[#1a1a1a] border-b border-[#333333] sticky top-0 z-20 flex items-center h-16 px-4">
+          <button
+            onClick={toggleSidebar}
+            className="mr-4 text-gray-400 hover:text-white transition-colors"
+          >
+            {sidebarCollapsed ? <MenuOutlined /> : <CloseOutlined />}
+          </button>
+          <div className="flex-1 flex justify-between items-center">
+            <div className="md:hidden">
+              {!sidebarCollapsed && <span className="text-lg font-bold text-blue-400">Bö<span className="text-yellow-400">rs</span>vy</span>}
             </div>
-          </Header>
+            <div className="flex items-center">
+              {/* Optional: Add any header elements here */}
+            </div>
+          </div>
+        </Header>
 
-          <Content className="p-4 sm:p-6 bg-[#1a1a1a]">
-            <Routes>
-              <Route path="/" element={<StockSearch onSearch={handleSearch} isLoading={isLoading} onToggleFavorite={toggleFavorite} favorites={favorites} />} />
-              <Route path="/favorites" element={<Favorites favorites={favorites} onToggleFavorite={toggleFavorite} loading={loading} onSelectStock={handleStockSelect} />} />
-              <Route path="/analysis/:symbol" element={<Analysis />} />
-              <Route path="/chart/:symbol" element={<StockChart />} />
-            </Routes>
-            
-            {error && (
-              <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
-                <p className="text-red-200 font-medium">{error}</p>
-              </div>
-            )}
+        <Content className="p-4 sm:p-6 bg-[#1a1a1a]">
+          <Routes>
+            <Route path="/" element={<StockSearch onSearch={handleSearch} isLoading={isLoading} onToggleFavorite={toggleFavorite} favorites={favorites} />} />
+            <Route path="/favorites" element={<Favorites favorites={favorites} onToggleFavorite={toggleFavorite} loading={loading} onSelectStock={handleStockSelect} />} />
+            <Route path="/analysis/:symbol" element={<Analysis />} />
+            <Route path="/chart/:symbol" element={<StockChart />} />
+          </Routes>
+          
+          {error && (
+            <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
+              <p className="text-red-200 font-medium">{error}</p>
+            </div>
+          )}
 
-            {favoritesError && (
-              <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
-                <p className="text-red-200 font-medium">{favoritesError}</p>
-              </div>
-            )}
+          {favoritesError && (
+            <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
+              <p className="text-red-200 font-medium">{favoritesError}</p>
+            </div>
+          )}
 
-            {!stocks.length && !selectedStock ? (
-              <div className="flex justify-center items-center min-h-[calc(100vh-300px)] -mt-8">
-                <WelcomeScreen />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8 mt-4 sm:mt-8">
-                <div className="lg:col-span-1">
-                  {stocks.length > 0 ? (
+          {!stocks.length && !selectedStock ? (
+            <div className="flex justify-center items-center min-h-[calc(100vh-300px)] -mt-8">
+              <WelcomeScreen />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8 mt-4 sm:mt-8">
+              {/* Stock list on the left */}
+              <div className="lg:col-span-1">
+                {stocks.length > 0 ? (
+                  <>
                     <StockList
                       stocks={stocks}
                       selectedStock={selectedStock}
@@ -214,23 +218,62 @@ function App() {
                       onToggleFavorite={toggleFavorite}
                       isLoading={isLoading}
                     />
-                  ) : null}
-                </div>
-                
-                <div className="lg:col-span-3 space-y-4 sm:space-y-8">
-                  <Favorites 
-                    favorites={favorites} 
-                    onSelectStock={setSelectedStock}
-                    onToggleFavorite={toggleFavorite}
-                  />
-                  
-                  {selectedStock && <Analysis selectedStock={selectedStock} />}
-                </div>
+                    
+                    {/* Quick access favorites in a horizontal scroll */}
+                    <div className="mt-4 bg-[#1a1a1a] rounded-2xl shadow-md p-4 border border-[#333333]">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-[#e6e6e6] flex items-center">
+                          <StarOutlined className="mr-2 text-yellow-400" /> Quick Favorites
+                        </h3>
+                      </div>
+                      {favorites.length > 0 ? (
+                        <div className="overflow-x-auto pb-2 flex-nowrap hide-scrollbar">
+                          <div className="flex space-x-2">
+                            {favorites.map(stock => (
+                              <button
+                                key={stock.symbol}
+                                onClick={() => handleStockSelect(stock)}
+                                className={`flex-shrink-0 px-3 py-2 rounded-lg border ${
+                                  selectedStock?.symbol === stock.symbol 
+                                    ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
+                                    : 'bg-[#262626] border-[#333333] text-gray-300 hover:border-blue-500/50'
+                                }`}
+                              >
+                                {stock.symbol}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 text-sm">No favorites yet</p>
+                      )}
+                      <div className="mt-2 text-right">
+                        <Link to="/favorites" className="text-xs text-blue-400 hover:text-blue-300">
+                          View all favorites →
+                        </Link>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
               </div>
-            )}
-          </Content>
-        </Layout>
+              
+              {/* Stock analysis on the right */}
+              <div className="lg:col-span-3">
+                {selectedStock && <Analysis selectedStock={selectedStock} />}
+              </div>
+            </div>
+          )}
+        </Content>
       </Layout>
+    </Layout>
+  );
+};
+
+// Main App function that provides the Router context
+function App() {
+  return (
+    <Router future={routerFutureConfig}>
+      <AppContent />
     </Router>
   );
 }
