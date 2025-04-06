@@ -26,7 +26,16 @@ function WelcomeScreen() {
       <div className="text-center space-y-12">
         <div>
           <h2 className="text-5xl font-bold text-white mb-6">
-            Welcome to <span className="text-blue-400">Börsvy</span>
+            Welcome to 
+            <div className="inline-block transform hover:scale-105 transition-all duration-300 ml-3">
+              <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-1 rounded-2xl shadow-lg">
+                <div className="bg-[#1a1a1a] rounded-xl px-4 py-2">
+                  <span className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-tight">
+                    Bö<span className="text-yellow-400">rs</span>vy
+                  </span>
+                </div>
+              </div>
+            </div>
           </h2>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto">
             Your intelligent companion for stock market analysis and insights. Start by searching for a stock or explore our trending picks.

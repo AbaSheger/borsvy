@@ -156,7 +156,15 @@ const AppContent = () => {
       >
         <div className="p-4 h-16 flex items-center border-b border-[#333333]">
           <Link to="/" className="flex items-center">
-            <span className="text-2xl font-bold text-blue-400">Bö<span className="text-yellow-400">rs</span>vy</span>
+            <div className="transform transition-all duration-300">
+              <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-0.5 rounded-lg shadow-md">
+                <div className="bg-[#1a1a1a] rounded-md px-3 py-1">
+                  <span className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-tight">
+                    Bö<span className="text-yellow-400">rs</span>vy
+                  </span>
+                </div>
+              </div>
+            </div>
           </Link>
         </div>
         <SidebarNavigation collapsed={sidebarCollapsed} onClose={() => setSidebarCollapsed(true)} />
@@ -172,7 +180,17 @@ const AppContent = () => {
           </button>
           <div className="flex-1 flex justify-between items-center">
             <div className="md:hidden">
-              {!sidebarCollapsed && <span className="text-lg font-bold text-blue-400">Bö<span className="text-yellow-400">rs</span>vy</span>}
+              {!sidebarCollapsed && (
+                <div className="transform transition-all duration-300">
+                  <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-0.5 rounded-lg shadow-md">
+                    <div className="bg-[#1a1a1a] rounded-md px-3 py-1">
+                      <span className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-tight">
+                        Bö<span className="text-yellow-400">rs</span>vy
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex items-center">
               {/* Optional: Add any header elements here */}
