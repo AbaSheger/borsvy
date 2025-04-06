@@ -107,18 +107,18 @@ const Analysis = ({ selectedStock }) => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-[#1a1a1a] rounded-xl shadow-sm p-6 border border-[#333333]">
-        <div className="flex items-center justify-between mb-6">
+    <div className="space-y-8 max-w-7xl mx-auto">
+      <div className="bg-[#1a1a1a] rounded-2xl shadow-lg p-4 sm:p-6 border border-[#333333]">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-[#e6e6e6]">{analysis.name}</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#e6e6e6]">{analysis.name}</h2>
             <p className="text-gray-400 mt-1">{symbol}</p>
           </div>
-          <div className="flex space-x-2">
+          <div className="flex flex-wrap gap-2">
             {intervals.map(interval => (
               <button
                 key={interval.value}
-                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors duration-300 ${
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-300 ${
                   activeInterval === interval.value 
                     ? 'bg-blue-500 text-white'
                     : 'bg-[#262626] text-gray-400 hover:text-[#e6e6e6]'
@@ -132,7 +132,7 @@ const Analysis = ({ selectedStock }) => {
         </div>
 
         {/* Chart Section */}
-        <div className="h-[400px] mb-6 bg-[#1a1a1a] border border-[#333333] rounded-lg overflow-hidden">
+        <div className="h-[300px] sm:h-[400px] mb-6 bg-[#1a1a1a] border border-[#333333] rounded-xl overflow-hidden">
           <StockChart 
             symbol={symbol} 
             interval={activeInterval} 
@@ -140,37 +140,37 @@ const Analysis = ({ selectedStock }) => {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-[#262626] rounded-lg p-4 border border-[#333333]">
-            <p className="text-sm font-medium text-gray-400">Current Price</p>
-            <p className="text-2xl font-bold text-[#e6e6e6]">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          <div className="bg-[#262626] rounded-xl p-4 border border-[#333333]">
+            <p className="text-xs sm:text-sm font-medium text-gray-400">Current Price</p>
+            <p className="text-xl sm:text-2xl font-bold text-[#e6e6e6]">
               ${currentPrice ? currentPrice.toFixed(2) : 'N/A'}
             </p>
           </div>
           
-          <div className={`rounded-lg p-4 border ${
+          <div className={`rounded-xl p-4 border ${
             priceChange > 0 
               ? 'bg-green-500/10 border-green-500/20' 
               : 'bg-red-500/10 border-red-500/20'
           }`}>
-            <p className="text-sm font-bold text-gray-400">24h Change</p>
-            <p className={`text-2xl font-bold ${
+            <p className="text-xs sm:text-sm font-bold text-gray-400">24h Change</p>
+            <p className={`text-xl sm:text-2xl font-bold ${
               priceChange > 0 ? 'text-green-400' : 'text-red-400'
             }`}>
               {priceChange ? `${priceChange > 0 ? '+' : ''}${priceChange.toFixed(2)}%` : 'N/A'}
             </p>
           </div>
           
-          <div className="bg-[#262626] rounded-lg p-4 border border-[#333333]">
-            <p className="text-sm font-medium text-gray-400">Volume</p>
-            <p className="text-2xl font-bold text-[#e6e6e6]">
+          <div className="bg-[#262626] rounded-xl p-4 border border-[#333333]">
+            <p className="text-xs sm:text-sm font-medium text-gray-400">Volume</p>
+            <p className="text-xl sm:text-2xl font-bold text-[#e6e6e6]">
               {analysis?.volume ? formatNumber(analysis.volume) : 'N/A'}
             </p>
           </div>
           
-          <div className="bg-[#262626] rounded-lg p-4 border border-[#333333]">
-            <p className="text-sm font-medium text-gray-400">Market Cap</p>
-            <p className="text-2xl font-bold text-[#e6e6e6]">
+          <div className="bg-[#262626] rounded-xl p-4 border border-[#333333]">
+            <p className="text-xs sm:text-sm font-medium text-gray-400">Market Cap</p>
+            <p className="text-xl sm:text-2xl font-bold text-[#e6e6e6]">
               {analysis?.marketCap ? formatMarketCap(analysis.marketCap) : 'N/A'}
             </p>
           </div>
@@ -178,7 +178,7 @@ const Analysis = ({ selectedStock }) => {
       </div>
 
       {/* Tab selector */}
-      <div className="bg-[#1a1a1a] rounded-xl shadow-md border border-[#333333] overflow-hidden">
+      <div className="bg-[#1a1a1a] rounded-2xl shadow-lg border border-[#333333] overflow-hidden">
         <div className="flex border-b border-[#333333]">
           <button
             className={`flex-1 py-3 px-4 text-center font-semibold ${
@@ -202,14 +202,14 @@ const Analysis = ({ selectedStock }) => {
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {activeTab === 'analysis' ? (
             <>
               <AnalysisVisualization 
                 analysis={analysis}
               />
               {/* News Card */}
-              <div className="mt-6">
+              <div className="mt-8">
                 <NewsCard news={news} />
               </div>
             </>

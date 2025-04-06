@@ -53,7 +53,7 @@ function StockDetail({ favorites, addToFavorites, removeFromFavorites }) {
 
   if (error || !stock) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-6 my-4">
+      <div className="bg-white rounded-2xl shadow-lg p-6 my-4">
         <h2 className="text-2xl font-semibold mb-4">Error</h2>
         <p className="text-red-600">{error || 'Stock not found'}</p>
         <Link to="/" className="text-blue-600 hover:underline mt-4 inline-block">
@@ -64,22 +64,25 @@ function StockDetail({ favorites, addToFavorites, removeFromFavorites }) {
   }
 
   return (
-    <div>
-      <div className="mb-4">
-        <Link to="/" className="text-blue-600 hover:underline">
-          &larr; Back to Home
+    <div className="max-w-7xl mx-auto px-4">
+      <div className="mb-6">
+        <Link to="/" className="text-blue-600 hover:underline inline-flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+          </svg>
+          Back to Home
         </Link>
       </div>
       
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex justify-between items-start">
+      <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 pb-4 sm:pb-6 mb-4 sm:mb-6">
           <div>
-            <h1 className="text-3xl font-bold">{stock.symbol}</h1>
-            <p className="text-xl text-gray-600">{stock.name}</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">{stock.symbol}</h1>
+            <p className="text-lg text-gray-600">{stock.name}</p>
           </div>
           <button
             onClick={handleFavoriteToggle}
-            className="text-yellow-500 hover:text-yellow-600 focus:outline-none"
+            className="text-yellow-500 hover:text-yellow-600 focus:outline-none self-start sm:self-center"
           >
             {isFavorite() ? (
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8">
@@ -93,58 +96,62 @@ function StockDetail({ favorites, addToFavorites, removeFromFavorites }) {
           </button>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-          <div>
-            <div className="mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <div className="space-y-4 sm:space-y-6">
+            <div>
               <h2 className="text-xl font-semibold mb-3">Price Information</h2>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Current Price:</span>
-                  <span className="font-bold">${stock.price.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Change:</span>
-                  <span className={`font-bold ${stock.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(2)}%
-                  </span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Open:</span>
-                  <span>${stock.open.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">High:</span>
-                  <span>${stock.high.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Low:</span>
-                  <span>${stock.low.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Volume:</span>
-                  <span>{stock.volume.toLocaleString()}</span>
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-sm text-gray-600">Current Price</p>
+                    <p className="text-lg font-bold">${stock.price.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Change</p>
+                    <p className={`text-lg font-bold ${stock.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Open</p>
+                    <p className="text-base font-medium">${stock.open.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">High</p>
+                    <p className="text-base font-medium">${stock.high.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Low</p>
+                    <p className="text-base font-medium">${stock.low.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Volume</p>
+                    <p className="text-base font-medium">{stock.volume.toLocaleString()}</p>
+                  </div>
                 </div>
               </div>
             </div>
             
             <div>
               <h2 className="text-xl font-semibold mb-3">Company Information</h2>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Industry:</span>
-                  <span>{stock.industry}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Market Cap:</span>
-                  <span>${(stock.marketCap / 1000000000).toFixed(2)}B</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">P/E Ratio:</span>
-                  <span>{stock.peRatio.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">52 Week Range:</span>
-                  <span>${stock.low52Week.toFixed(2)} - ${stock.high52Week.toFixed(2)}</span>
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-sm text-gray-600">Industry</p>
+                    <p className="text-base font-medium">{stock.industry}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Market Cap</p>
+                    <p className="text-base font-medium">${(stock.marketCap / 1000000000).toFixed(2)}B</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">P/E Ratio</p>
+                    <p className="text-base font-medium">{stock.peRatio.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">52 Week Range</p>
+                    <p className="text-base font-medium">${stock.low52Week.toFixed(2)} - ${stock.high52Week.toFixed(2)}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -153,7 +160,7 @@ function StockDetail({ favorites, addToFavorites, removeFromFavorites }) {
           <div>
             <h2 className="text-xl font-semibold mb-3">✨ AI-Generated Analysis</h2>
             {analysis ? (
-              <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="bg-gray-50 p-4 rounded-xl h-full">
                 <div className="mb-4">
                   <h3 className="font-medium text-gray-800 mb-2">Technical Analysis</h3>
                   <p className="text-gray-700">{analysis.technical}</p>
@@ -167,7 +174,7 @@ function StockDetail({ favorites, addToFavorites, removeFromFavorites }) {
                 </div>
               </div>
             ) : (
-              <div className="bg-gray-50 p-4 rounded-lg text-gray-600">
+              <div className="bg-gray-50 p-4 rounded-xl text-gray-600 h-full flex items-center justify-center">
                 AI analysis is not available for this stock.
               </div>
             )}

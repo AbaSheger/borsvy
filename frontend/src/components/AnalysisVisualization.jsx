@@ -305,19 +305,19 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
 
   return (
     <div className="analysis-visualization">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
         {/* Technical Analysis Section */}
-        <div className="bg-gray-800 p-3 sm:p-4 rounded-lg">
-          <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-white">Technical Analysis</h3>
+        <div className="bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-md">
+          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">Technical Analysis</h3>
           <div className="h-[250px] sm:h-[300px]">
             {chartData && <Line data={chartData} options={chartOptions} ref={technicalChartRef} />}
           </div>
           {analysis.technical?.signals && (
-            <div className="mt-3 sm:mt-4">
-              <h4 className="text-base sm:text-lg font-medium mb-2 text-white">Technical Signals</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="mt-4 sm:mt-5">
+              <h4 className="text-base sm:text-lg font-medium mb-3 text-white">Technical Signals</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {Object.entries(analysis.technical.signals).map(([key, value]) => (
-                  <div key={key} className="bg-gray-700 p-2 rounded">
+                  <div key={key} className="bg-gray-700 p-3 rounded-xl">
                     <span className="font-medium text-white">{key}:</span>{' '}
                     <span className={`${
                       value.toLowerCase().includes('bullish') ? 'text-green-500 font-bold' :
@@ -332,9 +332,9 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
         </div>
 
         {/* Sentiment Analysis Section */}
-        <div className="bg-gray-800 p-3 sm:p-4 rounded-lg">
-          <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-white">Sentiment Analysis</h3>
-          <div className="grid grid-cols-1 gap-3 sm:gap-4">
+        <div className="bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-md">
+          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">Sentiment Analysis</h3>
+          <div className="grid grid-cols-1 gap-4 sm:gap-5">
             <div className="h-[250px] sm:h-[300px]">
               {sentimentData && (
                 <Doughnut 
@@ -346,8 +346,8 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
             </div>
             {analysis.llm && (
               <div className="mt-3 sm:mt-4">
-                <h4 className="text-base sm:text-lg font-medium mb-2 text-white">✨ AI Analysis</h4>
-                <div className="bg-gray-700 p-3 sm:p-4 rounded">
+                <h4 className="text-base sm:text-lg font-medium mb-3 text-white">✨ AI Analysis</h4>
+                <div className="bg-gray-700 p-4 rounded-xl">
                   <p className="mb-2 text-white">
                     <span className="font-medium">Sentiment:</span>{' '}
                     <span className={`${
@@ -369,12 +369,12 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
         </div>
 
         {/* Fundamental Analysis Section */}
-        <div className="bg-gray-800 p-3 sm:p-4 rounded-lg">
-          <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-white">Fundamental Analysis</h3>
+        <div className="bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-md">
+          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">Fundamental Analysis</h3>
           {analysis.fundamental?.signals && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {Object.entries(analysis.fundamental.signals).map(([key, value]) => (
-                <div key={key} className="bg-gray-700 p-3 sm:p-4 rounded">
+                <div key={key} className="bg-gray-700 p-4 rounded-xl">
                   <h4 className="font-medium mb-2 text-white">{key}</h4>
                   <p className="text-white">{value}</p>
                 </div>
@@ -384,25 +384,25 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
         </div>
 
         {/* News Sentiment Section */}
-        <div className="bg-gray-800 p-3 sm:p-4 rounded-lg">
-          <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-white">News Sentiment</h3>
+        <div className="bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-md">
+          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">News Sentiment</h3>
           <div className="h-[250px] sm:h-[300px]">
             {newsSentimentData && <Doughnut data={newsSentimentData} options={newsSentimentOptions} ref={newsSentimentChartRef} />}
           </div>
           {analysis.newsSentiment && (
-            <div className="mt-3 sm:mt-4">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="bg-gray-700 p-2 rounded text-center">
+            <div className="mt-4 sm:mt-5">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-700 p-3 rounded-xl text-center">
                   <span className="text-green-500 font-bold">Positive</span>
-                  <p className="text-white">{analysis.newsSentiment.positiveCount}</p>
+                  <p className="text-white mt-1">{analysis.newsSentiment.positiveCount}</p>
                 </div>
-                <div className="bg-gray-700 p-2 rounded text-center">
+                <div className="bg-gray-700 p-3 rounded-xl text-center">
                   <span className="text-yellow-500 font-bold">Neutral</span>
-                  <p className="text-white">{analysis.newsSentiment.neutralCount}</p>
+                  <p className="text-white mt-1">{analysis.newsSentiment.neutralCount}</p>
                 </div>
-                <div className="bg-gray-700 p-2 rounded text-center">
+                <div className="bg-gray-700 p-3 rounded-xl text-center">
                   <span className="text-red-500 font-bold">Negative</span>
-                  <p className="text-white">{analysis.newsSentiment.negativeCount}</p>
+                  <p className="text-white mt-1">{analysis.newsSentiment.negativeCount}</p>
                 </div>
               </div>
             </div>
@@ -412,9 +412,9 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
 
       {/* Overall Summary Section */}
       {analysis.summary && (
-        <div className="mt-4 sm:mt-6 bg-gray-800 p-3 sm:p-4 rounded-lg">
-          <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-white">✨ Overall Analysis</h3>
-          <div className="bg-gray-700 p-4 sm:p-6 rounded-lg whitespace-pre-line">
+        <div className="mt-6 sm:mt-8 bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-md">
+          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">✨ Overall Analysis</h3>
+          <div className="bg-gray-700 p-5 sm:p-6 rounded-xl whitespace-pre-line">
             <p className="text-base sm:text-lg text-white leading-relaxed">
               {analysis.summary}
             </p>
@@ -450,4 +450,4 @@ AnalysisVisualization.propTypes = {
   technicalData: PropTypes.object
 };
 
-export default AnalysisVisualization; 
+export default AnalysisVisualization;
