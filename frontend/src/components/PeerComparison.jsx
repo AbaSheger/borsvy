@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import axios from 'axios';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Tooltip } from 'antd';
+import { useTheme } from '../context/ThemeContext';
 
 const formatMarketCap = (value) => {
   // Convert to number and handle invalid values
@@ -23,6 +24,7 @@ const formatMarketCap = (value) => {
 };
 
 function PeerComparison({ symbol }) {
+  const { theme } = useTheme();
   const [peerData, setPeerData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -65,17 +67,17 @@ function PeerComparison({ symbol }) {
 
   if (isLoading) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow-sm">
-        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+      <div className={`${theme === 'dark' ? 'bg-[#1a1a1a] border border-[#333333]' : 'bg-white'} p-6 rounded-lg shadow-sm`}>
+        <h2 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'} mb-6 flex items-center`}>
           <span className="mr-2 text-blue-500">🏢</span>
           Industry Comparison
         </h2>
         <div className="animate-pulse space-y-4">
-          <div className="h-24 bg-gray-100 rounded-lg"></div>
-          <div className="h-64 bg-gray-100 rounded-lg"></div>
+          <div className={`h-24 ${theme === 'dark' ? 'bg-[#333333]' : 'bg-gray-100'} rounded-lg`}></div>
+          <div className={`h-64 ${theme === 'dark' ? 'bg-[#333333]' : 'bg-gray-100'} rounded-lg`}></div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="h-20 bg-gray-100 rounded-lg"></div>
-            <div className="h-20 bg-gray-100 rounded-lg"></div>
+            <div className={`h-20 ${theme === 'dark' ? 'bg-[#333333]' : 'bg-gray-100'} rounded-lg`}></div>
+            <div className={`h-20 ${theme === 'dark' ? 'bg-[#333333]' : 'bg-gray-100'} rounded-lg`}></div>
           </div>
         </div>
       </div>
@@ -84,12 +86,12 @@ function PeerComparison({ symbol }) {
 
   if (error) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow-sm">
-        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+      <div className={`${theme === 'dark' ? 'bg-[#1a1a1a] border border-[#333333]' : 'bg-white'} p-6 rounded-lg shadow-sm`}>
+        <h2 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'} mb-6 flex items-center`}>
           <span className="mr-2 text-blue-500">🏢</span>
           Industry Comparison
         </h2>
-        <div className="text-gray-600 text-center py-8">
+        <div className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} text-center py-8`}>
           {error}
         </div>
       </div>
@@ -98,18 +100,13 @@ function PeerComparison({ symbol }) {
 
   if (error || !peerData || !peerData.peers || peerData.peers.length === 0) {
     return (
-      <div className="bg-[#1a1a1a] p-6 rounded-xl border border-[#333333]">
-        <h2 className="text-xl font-bold text-[#e6e6e6] mb-4 flex items-center">
-          <span className="mr-2 text-blue-400">🏢</span>
+      <div className={`${theme === 'dark' ? 'bg-[#1a1a1a] border border-[#333333]' : 'bg-white'} p-6 rounded-lg shadow-sm`}>
+        <h2 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'} mb-6 flex items-center`}>
+          <span className="mr-2 text-blue-500">🏢</span>
           Industry Comparison
         </h2>
-        <div className="bg-[#262626] p-6 rounded-lg border border-[#333333]">
-          <p className="text-[#e6e6e6] font-medium text-center">
-            {error || "No industry peers data available for this stock."}
-          </p>
-          <p className="text-gray-400 text-sm text-center mt-2">
-            This may be because the stock is in a unique industry or we don't have enough data.
-          </p>
+        <div className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} text-center py-8`}>
+          No peer comparison data available.
         </div>
       </div>
     );
@@ -117,15 +114,15 @@ function PeerComparison({ symbol }) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-[#1a1a1a] p-6 rounded-xl border border-[#333333]">
-        <h2 className="text-xl font-bold text-[#e6e6e6] mb-4 flex items-center">
-          <span className="mr-2 text-blue-400">🏢</span>
+      <div className={`${theme === 'dark' ? 'bg-[#1a1a1a] border border-[#333333]' : 'bg-white'} p-6 rounded-lg shadow-sm`}>
+        <h2 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'} mb-6 flex items-center`}>
+          <span className="mr-2 text-blue-500">🏢</span>
           Industry Peers
         </h2>
         
         <div className="overflow-x-auto">
           <table className="min-w-full">
-            <thead className="bg-[#262626] border-b border-[#333333]">
+            <thead className={`${theme === 'dark' ? 'bg-[#262626] border-b border-[#333333]' : 'bg-gray-100'}`}>
               <tr>
                 <th className="px-3 sm:px-6 py-3 text-left text-xs sm:text-sm font-semibold text-gray-400">Company</th>
                 <th className="px-3 sm:px-6 py-3 text-right text-xs sm:text-sm font-semibold text-gray-400">Price</th>

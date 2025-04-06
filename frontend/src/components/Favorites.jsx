@@ -1,12 +1,15 @@
 import PropTypes from 'prop-types';
+import { useTheme } from '../context/ThemeContext';
 
 function Favorites({ favorites, onSelectStock, onToggleFavorite }) {
+  const { theme } = useTheme();
+  
   // Better handling of empty, null, or undefined favorites array
   if (!favorites || !Array.isArray(favorites) || favorites.length === 0) {
     return (
-      <div className="bg-[#1a1a1a] rounded-xl p-6 border border-[#333333] shadow-sm">
-        <p className="text-[#e6e6e6] text-center font-medium">No favorite stocks yet</p>
-        <p className="text-gray-400 text-center text-sm mt-2">Add stocks to your favorites for quick access</p>
+      <div className={`${theme === 'dark' ? 'bg-[#1a1a1a] border-[#333333] text-[#e6e6e6]' : 'bg-white border-gray-200 text-gray-800'} rounded-xl p-6 border shadow-sm`}>
+        <p className="text-center font-medium">No favorite stocks yet</p>
+        <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} text-center text-sm mt-2`}>Add stocks to your favorites for quick access</p>
       </div>
     );
   }
@@ -24,14 +27,14 @@ function Favorites({ favorites, onSelectStock, onToggleFavorite }) {
         return (
           <div
             key={symbol}
-            className="bg-[#1a1a1a] rounded-xl border border-[#333333] p-4 hover:border-blue-500 
-                     hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300 cursor-pointer"
+            className={`${theme === 'dark' ? 'bg-[#1a1a1a] border-[#333333]' : 'bg-white border-gray-200'} rounded-xl border p-4 hover:border-blue-500 
+                     hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300 cursor-pointer`}
             onClick={() => onSelectStock(stock)}
           >
             <div className="flex justify-between items-start">
               <div>
-                <h3 className="text-lg font-bold text-[#e6e6e6]">{symbol}</h3>
-                <p className="text-gray-400 font-medium">{name}</p>
+                <h3 className={`text-lg font-bold ${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'}`}>{symbol}</h3>
+                <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} font-medium`}>{name}</p>
               </div>
               <button
                 onClick={(e) => {
@@ -45,7 +48,7 @@ function Favorites({ favorites, onSelectStock, onToggleFavorite }) {
               </button>
             </div>
             <div className="flex justify-between items-center mt-3">
-              <span className="text-xl font-bold text-[#e6e6e6]">${price.toFixed(2)}</span>
+              <span className={`text-xl font-bold ${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'}`}>${price.toFixed(2)}</span>
               <div className={`px-3 py-1 rounded-full text-sm font-bold ${
                 change >= 0 
                   ? 'bg-green-500/10 text-green-400' 

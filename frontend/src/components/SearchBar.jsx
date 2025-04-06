@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { useDebounce } from '../hooks/useDebounce';
 import axios from 'axios';
 import { API_URL } from '../config';
+import { useTheme } from '../context/ThemeContext';
 
 function SearchBar({ onSearch }) {
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const debouncedQuery = useDebounce(query, 500); // 500ms debounce
+  const { theme } = useTheme();
 
   useEffect(() => {
     const searchStocks = async () => {
@@ -89,7 +91,7 @@ function SearchBar({ onSearch }) {
     <div className="relative w-full">
       <div className="relative">
         <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-          <svg className="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
+          <svg className={`w-4 h-4 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
             <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
           </svg>
         </div>
@@ -98,8 +100,12 @@ function SearchBar({ onSearch }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by company name or ticker symbol..."
-          className="w-full pl-10 pr-4 py-3 bg-[#262626] border border-[#333333] text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block placeholder-gray-400"
-          style={{ color: 'white', caretColor: 'white', fontWeight: 500 }}
+          className={`w-full pl-10 pr-4 py-3 ${
+            theme === 'dark' 
+              ? 'bg-[#262626] border-[#333333] placeholder-white text-white' 
+              : 'bg-white border-gray-200 placeholder-gray-500 text-gray-800'
+          } border text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block`}
+          style={{ fontWeight: 500 }}
         />
         {isLoading && (
           <div className="absolute right-3 top-3">
@@ -108,7 +114,11 @@ function SearchBar({ onSearch }) {
         )}
       </div>
       {error && (
-        <div className="mt-2 text-sm text-red-500 bg-red-50 p-2 rounded">
+        <div className={`mt-2 text-sm ${
+          theme === 'dark' 
+            ? 'text-red-400 bg-red-900/30' 
+            : 'text-red-500 bg-red-50'
+        } p-2 rounded`}>
           {error}
         </div>
       )}

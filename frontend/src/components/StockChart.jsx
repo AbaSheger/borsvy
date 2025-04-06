@@ -4,6 +4,7 @@ import { Card, Spin, message } from 'antd';
 import { Line } from 'react-chartjs-2';
 import axios from 'axios';
 import { axiosConfig } from '../config';
+import { useTheme } from '../context/ThemeContext';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -28,12 +29,13 @@ ChartJS.register(
   Filler
 );
 
-const StockChart = ({ symbol: propSymbol, interval: propInterval = '1D', theme = 'light' }) => {
+const StockChart = ({ symbol: propSymbol, interval: propInterval = '1D' }) => {
   const { symbol: routeSymbol } = useParams();
   const symbol = propSymbol || routeSymbol;
   const [priceData, setPriceData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { theme } = useTheme();
 
   useEffect(() => {
     const fetchPriceData = async () => {

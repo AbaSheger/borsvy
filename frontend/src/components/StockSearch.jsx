@@ -6,6 +6,7 @@ import { Tooltip, Input, Spin, ConfigProvider, List, Card, Button, message, Badg
 import debounce from 'lodash/debounce';
 import { API_URL, axiosConfig } from '../config';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
 
 function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, favorites }) {
   const [query, setQuery] = useState('');
@@ -16,6 +17,7 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
   const [lastSearchTime, setLastSearchTime] = useState(0);
   const searchRef = useRef(null);
   const navigate = useNavigate();
+  const { theme } = useTheme();
 
   // Debounced search function with rate limiting
   const debouncedSearch = useRef(
@@ -158,11 +160,11 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
         <div className="text-center mb-16">
           <div className="inline-block transform hover:scale-105 transition-all duration-300">
             <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-1 rounded-2xl shadow-2xl">
-              <div className="bg-[#1a1a1a] rounded-xl p-6">
+              <div className={`${theme === 'dark' ? 'bg-[#1a1a1a]' : 'bg-white'} rounded-xl p-6`}>
                 <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-tight">
                   Bö<span className="text-yellow-400">rs</span>vy
                 </h1>
-                <p className="text-gray-400 mt-2 text-sm">Your Gateway to Smart Trading</p>
+                <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} mt-2 text-sm`}>Your Gateway to Smart Trading</p>
               </div>
             </div>
           </div>
@@ -198,14 +200,18 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
                 </Tooltip>
               }
               className="w-full h-16 text-lg rounded-xl shadow-lg hover:shadow-blue-500/20 transition-all duration-300"
-              style={{ backgroundColor: '#262626', color: '#e6e6e6', borderColor: '#333333' }}
+              style={{ 
+                backgroundColor: theme === 'dark' ? '#262626' : '#f5f5f5', 
+                color: theme === 'dark' ? '#e6e6e6' : '#333333', 
+                borderColor: theme === 'dark' ? '#333333' : '#d9d9d9'
+              }}
             />
           </div>
         </div>
 
         {/* Suggestions Dropdown */}
         {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute z-10 w-full mt-2 bg-[#1a1a1a] rounded-xl shadow-2xl border border-[#333333] max-h-96 overflow-y-auto backdrop-blur-lg">
+          <div className={`absolute z-10 w-full mt-2 ${theme === 'dark' ? 'bg-[#1a1a1a]' : 'bg-white'} rounded-xl shadow-2xl border ${theme === 'dark' ? 'border-[#333333]' : 'border-gray-200'} max-h-96 overflow-y-auto backdrop-blur-lg`}>
             <div className="bg-blue-500/20 px-4 py-2 border-b border-[#333333]">
               <p className="text-blue-400 text-sm font-medium flex items-center">
                 <BarChartOutlined className="mr-1" /> 
@@ -215,17 +221,17 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
             {suggestions.map((stock, index) => (
               <div
                 key={stock.symbol}
-                className={`px-6 py-4 cursor-pointer hover:bg-[#262626] transition-colors duration-150
-                          ${index === selectedIndex ? 'bg-[#262626]' : ''}`}
+                className={`px-6 py-4 cursor-pointer ${theme === 'dark' ? 'hover:bg-[#262626]' : 'hover:bg-gray-100'} transition-colors duration-150
+                          ${index === selectedIndex ? (theme === 'dark' ? 'bg-[#262626]' : 'bg-gray-100') : ''}`}
                 onClick={() => handleSuggestionSelect(stock)}
               >
                 <div className="flex justify-between items-center">
                   <div>
-                    <div className="font-bold text-[#e6e6e6] text-lg">{stock.symbol}</div>
+                    <div className={`font-bold ${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'} text-lg`}>{stock.symbol}</div>
                     <div className="text-sm text-gray-400">{stock.name}</div>
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold text-[#e6e6e6] text-lg">
+                    <div className={`font-semibold ${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'} text-lg`}>
                       ${stock.price?.toFixed(2) || 'N/A'}
                     </div>
                     {stock.changePercent !== undefined && (
@@ -247,7 +253,7 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-2">
               <FireOutlined className="text-orange-500 text-2xl" />
-              <h3 className="text-2xl font-bold text-[#e6e6e6]">Trending Stocks</h3>
+              <h3 className={`text-2xl font-bold ${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'}`}>Trending Stocks</h3>
             </div>
             <Tooltip title="Click on any stock to see detailed analysis, charts, and news">
               <InfoCircleOutlined className="text-gray-400 text-xl" />
@@ -262,15 +268,15 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
                   // Navigate directly to analysis for trending stocks
                   navigate(`/analysis/${symbol}`);
                 }}
-                className="group relative p-4 bg-[#1a1a1a] rounded-xl border border-[#333333] 
+                className={`group relative p-4 ${theme === 'dark' ? 'bg-[#1a1a1a]' : 'bg-white'} rounded-xl border ${theme === 'dark' ? 'border-[#333333]' : 'border-gray-200'} 
                          hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20 
-                         transition-all duration-300 overflow-hidden transform hover:-translate-y-1"
+                         transition-all duration-300 overflow-hidden transform hover:-translate-y-1`}
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 
                               opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative">
-                  <span className="text-xl font-bold text-[#e6e6e6] group-hover:text-blue-400 
-                                 transition-colors duration-300">{symbol}</span>
+                  <span className={`text-xl font-bold ${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'} group-hover:text-blue-400 
+                                 transition-colors duration-300`}>{symbol}</span>
                   <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-blue-500 
                                 group-hover:w-full transition-all duration-300" />
                 </div>
@@ -281,20 +287,20 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
 
         {/* Features Section */}
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-[#1a1a1a]/50 p-6 rounded-xl border border-[#333333] backdrop-blur-sm">
+          <div className={`${theme === 'dark' ? 'bg-[#1a1a1a]/50' : 'bg-gray-100'} p-6 rounded-xl border ${theme === 'dark' ? 'border-[#333333]' : 'border-gray-200'} backdrop-blur-sm`}>
             <StarOutlined className="text-yellow-400 text-2xl mb-4" />
-            <h4 className="text-[#e6e6e6] font-semibold mb-2">Real-time Data</h4>
-            <p className="text-gray-400 text-sm">Get instant access to live market data and updates</p>
+            <h4 className={`${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'} font-semibold mb-2`}>Real-time Data</h4>
+            <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} text-sm`}>Get instant access to live market data and updates</p>
           </div>
-          <div className="bg-[#1a1a1a]/50 p-6 rounded-xl border border-[#333333] backdrop-blur-sm">
+          <div className={`${theme === 'dark' ? 'bg-[#1a1a1a]/50' : 'bg-gray-100'} p-6 rounded-xl border ${theme === 'dark' ? 'border-[#333333]' : 'border-gray-200'} backdrop-blur-sm`}>
             <FireOutlined className="text-orange-400 text-2xl mb-4" />
-            <h4 className="text-[#e6e6e6] font-semibold mb-2">Smart Analytics</h4>
-            <p className="text-gray-400 text-sm">Advanced tools for market analysis and insights</p>
+            <h4 className={`${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'} font-semibold mb-2`}>Smart Analytics</h4>
+            <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} text-sm`}>Advanced tools for market analysis and insights</p>
           </div>
-          <div className="bg-[#1a1a1a]/50 p-6 rounded-xl border border-[#333333] backdrop-blur-sm">
+          <div className={`${theme === 'dark' ? 'bg-[#1a1a1a]/50' : 'bg-gray-100'} p-6 rounded-xl border ${theme === 'dark' ? 'border-[#333333]' : 'border-gray-200'} backdrop-blur-sm`}>
             <InfoCircleOutlined className="text-blue-400 text-2xl mb-4" />
-            <h4 className="text-[#e6e6e6] font-semibold mb-2">Market Intelligence</h4>
-            <p className="text-gray-400 text-sm">Stay informed with comprehensive market research</p>
+            <h4 className={`${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'} font-semibold mb-2`}>Market Intelligence</h4>
+            <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} text-sm`}>Stay informed with comprehensive market research</p>
           </div>
         </div>
 

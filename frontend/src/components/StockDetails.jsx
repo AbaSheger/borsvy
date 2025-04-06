@@ -3,11 +3,13 @@ import PropTypes from 'prop-types';
 import axios from 'axios';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Tooltip } from 'antd';
+import { useTheme } from '../context/ThemeContext';
 
 function StockDetails({ symbol }) {
   const [details, setDetails] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { theme } = useTheme();
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -84,17 +86,17 @@ function StockDetails({ symbol }) {
 
   // Helper component for metrics display
   const MetricCard = ({ title, metrics }) => (
-    <div className="bg-[#262626] rounded-xl p-4 border border-[#333333]">
-      <h3 className="text-lg font-semibold mb-3 text-[#e6e6e6]">{title}</h3>
+    <div className={`${theme === 'dark' ? 'bg-[#262626] border-[#333333]' : 'bg-white border-gray-200'} rounded-xl p-4 border`}>
+      <h3 className={`text-lg font-semibold mb-3 ${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'}`}>{title}</h3>
       <div className="space-y-3">
         {metrics.map((metric, index) => (
           <div key={index} className="flex justify-between items-center">
-            <span className="text-gray-400 font-medium">{metric.label}</span>
-            <span className={`font-semibold ${metric.className || 'text-[#e6e6e6]'} flex items-center`}>
+            <span className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'} font-medium`}>{metric.label}</span>
+            <span className={`font-semibold ${metric.className || (theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800')} flex items-center`}>
               {metric.value}
               {metric.hasInfo && (
                 <Tooltip title="Some financial metrics may be limited in the free data tier">
-                  <InfoCircleOutlined style={{ marginLeft: '4px', color: '#8c8c8c', fontSize: '14px' }} />
+                  <InfoCircleOutlined style={{ marginLeft: '4px', color: theme === 'dark' ? '#8c8c8c' : '#a3a3a3', fontSize: '14px' }} />
                 </Tooltip>
               )}
             </span>

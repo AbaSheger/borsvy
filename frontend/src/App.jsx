@@ -10,8 +10,10 @@ import Favorites from './components/Favorites';
 import Analysis from './components/Analysis';
 import WelcomeScreen from './components/WelcomeScreen';
 import StockChart from './components/StockChart';
+import ThemeToggle from './components/ThemeToggle';
 import './App.css';
 import { API_URL } from './config';
+import { useTheme } from './context/ThemeContext';
 
 const { Header, Content, Sider } = Layout;
 
@@ -25,6 +27,7 @@ const routerFutureConfig = {
 const SidebarNavigation = ({ collapsed, onClose }) => {
   const location = useLocation();
   const pathName = location.pathname;
+  const { theme } = useTheme();
   
   const getSelectedKeys = () => {
     if (pathName === '/') return ['home'];
@@ -36,10 +39,10 @@ const SidebarNavigation = ({ collapsed, onClose }) => {
 
   return (
     <Menu
-      theme="dark"
+      theme={theme}
       mode="inline"
       selectedKeys={getSelectedKeys()}
-      className="bg-[#1a1a1a] border-r border-[#333333]"
+      className={`${theme === 'dark' ? 'bg-[#1a1a1a] border-r border-[#333333]' : 'bg-white border-r border-gray-200'}`}
       items={[
         {
           key: 'home',
@@ -152,7 +155,7 @@ const AppContent = () => {
         collapsed={sidebarCollapsed}
         collapsedWidth={0}
         width={250}
-        className="fixed h-full z-30 left-0 top-0 bg-[#1a1a1a] border-r border-[#333333]"
+        className="fixed h-full z-30 left-0 top-0 dark:bg-[#1a1a1a] bg-white dark:border-[#333333] border-gray-200 border-r"
       >
         <div className="p-4 h-16 flex items-center border-b border-[#333333]">
           <Link to="/" className="flex items-center">
@@ -171,7 +174,7 @@ const AppContent = () => {
       </Sider>
 
       <Layout className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-[250px]'}`}>
-        <Header className="bg-[#1a1a1a] border-b border-[#333333] sticky top-0 z-20 flex items-center h-16 px-4">
+        <Header className="sticky top-0 z-20 flex items-center h-16 px-4 bg-white dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-[#333333]">
           <button
             onClick={toggleSidebar}
             className="mr-4 text-gray-400 hover:text-white transition-colors"
@@ -193,12 +196,12 @@ const AppContent = () => {
               )}
             </div>
             <div className="flex items-center">
-              {/* Optional: Add any header elements here */}
+              <ThemeToggle />
             </div>
           </div>
         </Header>
 
-        <Content className="p-4 sm:p-6 bg-[#1a1a1a]">
+        <Content className="p-4 sm:p-6 bg-slate-100 dark:bg-[#1a1a1a]">
           <Routes>
             <Route path="/" element={<StockSearch onSearch={handleSearch} isLoading={isLoading} onToggleFavorite={toggleFavorite} favorites={favorites} />} />
             <Route path="/favorites" element={<Favorites favorites={favorites} onToggleFavorite={toggleFavorite} loading={loading} onSelectStock={handleStockSelect} />} />

@@ -1,21 +1,25 @@
+import React from 'react';
 import PropTypes from 'prop-types';
+import { useTheme } from '../context/ThemeContext';
 
 function NewsCard({ news }) {
+  const { theme } = useTheme();
+
   if (!news || !Array.isArray(news) || news.length === 0) {
     return (
-      <div className="bg-[#1a1a1a] rounded-2xl shadow-lg p-4 sm:p-6 border border-[#333333]">
-        <h2 className="flex items-center text-xl sm:text-2xl font-bold text-[#e6e6e6] mb-4 sm:mb-6">
+      <div className={`${theme === 'dark' ? 'bg-[#1a1a1a] border-[#333333] text-[#e6e6e6]' : 'bg-white border-gray-200 text-gray-800'} rounded-2xl shadow-lg p-4 sm:p-6 border`}>
+        <h2 className={`flex items-center text-xl sm:text-2xl font-bold mb-4 sm:mb-6`}>
           <span className="mr-2 text-blue-400">📰</span>
           Recent News
         </h2>
-        <p className="text-gray-400 text-center py-4">No recent news available</p>
+        <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} text-center py-4`}>No recent news available</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#1a1a1a] rounded-2xl shadow-lg p-4 sm:p-6 border border-[#333333]">
-      <h2 className="flex items-center text-xl sm:text-2xl font-bold text-[#e6e6e6] mb-4 sm:mb-6">
+    <div className={`${theme === 'dark' ? 'bg-[#1a1a1a] border-[#333333] text-[#e6e6e6]' : 'bg-white border-gray-200 text-gray-800'} rounded-2xl shadow-lg p-4 sm:p-6 border`}>
+      <h2 className={`flex items-center text-xl sm:text-2xl font-bold mb-4 sm:mb-6`}>
         <span className="mr-2 text-blue-400">📰</span>
         Recent News
       </h2>
@@ -25,16 +29,16 @@ function NewsCard({ news }) {
         {news.map((article, index) => (
           <div 
             key={index} 
-            className="flex flex-col bg-[#262626] rounded-xl border border-[#333333] hover:bg-[#2a2a2a] transition-colors overflow-hidden h-full"
+            className={`flex flex-col ${theme === 'dark' ? 'bg-[#262626] border-[#333333] hover:bg-[#2a2a2a]' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} rounded-xl border transition-colors overflow-hidden h-full`}
           >
             <div className="h-48 overflow-hidden">
               <img
-                src={article.thumbnail || 'https://placehold.co/400x300/1a1a1a/666666/png?text=No+Image'}
+                src={article.thumbnail || `https://placehold.co/400x300/${theme === 'dark' ? '1a1a1a/666666' : 'eeeeee/999999'}/png?text=No+Image`}
                 alt={article.title}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   e.target.onerror = null;
-                  e.target.src = 'https://placehold.co/400x300/1a1a1a/666666/png?text=No+Image';
+                  e.target.src = `https://placehold.co/400x300/${theme === 'dark' ? '1a1a1a/666666' : 'eeeeee/999999'}/png?text=No+Image`;
                 }}
               />
             </div>
@@ -47,12 +51,12 @@ function NewsCard({ news }) {
               >
                 {article.title}
               </a>
-              <div className="flex flex-wrap items-center text-xs text-gray-400 mb-3">
+              <div className={`flex flex-wrap items-center text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} mb-3`}>
                 <span>{article.source}</span>
                 <span className="mx-2">•</span>
                 <span>{article.date}</span>
               </div>
-              <p className="text-gray-300 text-sm line-clamp-3 flex-grow">
+              <p className={`${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} text-sm line-clamp-3 flex-grow`}>
                 {article.summary}
               </p>
               <a 
