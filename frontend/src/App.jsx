@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { Layout, message } from 'antd';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Layout, Menu, message } from 'antd';
+import { HomeOutlined, StarOutlined, LineChartOutlined, MenuOutlined, CloseOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { axiosConfig } from './config';
 import StockSearch from './components/StockSearch';
@@ -12,12 +13,53 @@ import StockChart from './components/StockChart';
 import './App.css';
 import { API_URL } from './config';
 
-const { Header, Content } = Layout;
+const { Header, Content, Sider } = Layout;
 
 // Define router future flags to suppress warnings
 const routerFutureConfig = {
   v7_startTransition: true,
   v7_relativeSplatPath: true
+};
+
+// Navigation component for sidebar
+const SidebarNavigation = ({ collapsed, onClose }) => {
+  const location = useLocation();
+  const pathName = location.pathname;
+  
+  const getSelectedKeys = () => {
+    if (pathName === '/') return ['home'];
+    if (pathName === '/favorites') return ['favorites'];
+    if (pathName.includes('/analysis')) return ['analysis'];
+    if (pathName.includes('/chart')) return ['chart'];
+    return [];
+  };
+
+  return (
+    <Menu
+      theme="dark"
+      mode="inline"
+      selectedKeys={getSelectedKeys()}
+      className="bg-[#1a1a1a] border-r border-[#333333]"
+      items={[
+        {
+          key: 'home',
+          icon: <HomeOutlined />,
+          label: <Link to="/">Home</Link>,
+        },
+        {
+          key: 'favorites',
+          icon: <StarOutlined />,
+          label: <Link to="/favorites">Favorites</Link>,
+        },
+        {
+          key: 'analysis',
+          icon: <LineChartOutlined />,
+          label: "Latest Analysis",
+          disabled: true,
+        }
+      ]}
+    />
+  );
 };
 
 function App() {
@@ -28,6 +70,24 @@ function App() {
   const [favorites, setFavorites] = useState([]);
   const [favoritesError, setFavoritesError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 768);
+
+  // Sidebar collapsed state handler
+  const toggleSidebar = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+  };
+
+  // Update sidebar collapsed state on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setSidebarCollapsed(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   const fetchFavorites = async () => {
     try {
@@ -83,61 +143,93 @@ function App() {
 
   return (
     <Router future={routerFutureConfig}>
-      <Layout className="min-h-screen bg-[#1a1a1a]">
-        <Header className="bg-[#1a1a1a] border-b border-[#333333] sticky top-0 z-50">
-          {/* Header content here */}
-        </Header>
-        <Content className="p-6 bg-[#1a1a1a]">
-          <Routes>
-            <Route path="/" element={<StockSearch onSearch={handleSearch} isLoading={isLoading} onToggleFavorite={toggleFavorite} favorites={favorites} />} />
-            <Route path="/favorites" element={<Favorites favorites={favorites} onToggleFavorite={toggleFavorite} loading={loading} onSelectStock={handleStockSelect} />} />
-            <Route path="/analysis/:symbol" element={<Analysis />} />
-            <Route path="/chart/:symbol" element={<StockChart />} />
-          </Routes>
-          
-          {error && (
-            <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
-              <p className="text-red-200 font-medium">{error}</p>
-            </div>
-          )}
+      <Layout className="min-h-screen">
+        <Sider 
+          trigger={null}
+          collapsible
+          collapsed={sidebarCollapsed}
+          collapsedWidth={0}
+          width={250}
+          className="fixed h-full z-30 left-0 top-0 bg-[#1a1a1a] border-r border-[#333333]"
+        >
+          <div className="p-4 h-16 flex items-center border-b border-[#333333]">
+            <Link to="/" className="flex items-center">
+              <span className="text-2xl font-bold text-blue-400">Bö<span className="text-yellow-400">rs</span>vy</span>
+            </Link>
+          </div>
+          <SidebarNavigation collapsed={sidebarCollapsed} onClose={() => setSidebarCollapsed(true)} />
+        </Sider>
 
-          {favoritesError && (
-            <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
-              <p className="text-red-200 font-medium">{favoritesError}</p>
-            </div>
-          )}
-
-          {!stocks.length && !selectedStock ? (
-            <div className="flex justify-center items-center min-h-[calc(100vh-300px)] -mt-8">
-              <WelcomeScreen />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8 mt-4 sm:mt-8">
-              <div className="lg:col-span-1">
-                {stocks.length > 0 ? (
-                  <StockList
-                    stocks={stocks}
-                    selectedStock={selectedStock}
-                    onSelectStock={handleStockSelect}
-                    favorites={favorites}
-                    onToggleFavorite={toggleFavorite}
-                    isLoading={isLoading}
-                  />
-                ) : null}
+        <Layout className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-[250px]'}`}>
+          <Header className="bg-[#1a1a1a] border-b border-[#333333] sticky top-0 z-20 flex items-center h-16 px-4">
+            <button
+              onClick={toggleSidebar}
+              className="mr-4 text-gray-400 hover:text-white transition-colors"
+            >
+              {sidebarCollapsed ? <MenuOutlined /> : <CloseOutlined />}
+            </button>
+            <div className="flex-1 flex justify-between items-center">
+              <div className="md:hidden">
+                {!sidebarCollapsed && <span className="text-lg font-bold text-blue-400">Bö<span className="text-yellow-400">rs</span>vy</span>}
               </div>
-              
-              <div className="lg:col-span-3 space-y-4 sm:space-y-8">
-                <Favorites 
-                  favorites={favorites} 
-                  onSelectStock={setSelectedStock}
-                  onToggleFavorite={toggleFavorite}
-                />
+              <div className="flex items-center">
+                {/* Optional: Add any header elements here */}
+              </div>
+            </div>
+          </Header>
+
+          <Content className="p-4 sm:p-6 bg-[#1a1a1a]">
+            <Routes>
+              <Route path="/" element={<StockSearch onSearch={handleSearch} isLoading={isLoading} onToggleFavorite={toggleFavorite} favorites={favorites} />} />
+              <Route path="/favorites" element={<Favorites favorites={favorites} onToggleFavorite={toggleFavorite} loading={loading} onSelectStock={handleStockSelect} />} />
+              <Route path="/analysis/:symbol" element={<Analysis />} />
+              <Route path="/chart/:symbol" element={<StockChart />} />
+            </Routes>
+            
+            {error && (
+              <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
+                <p className="text-red-200 font-medium">{error}</p>
+              </div>
+            )}
+
+            {favoritesError && (
+              <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
+                <p className="text-red-200 font-medium">{favoritesError}</p>
+              </div>
+            )}
+
+            {!stocks.length && !selectedStock ? (
+              <div className="flex justify-center items-center min-h-[calc(100vh-300px)] -mt-8">
+                <WelcomeScreen />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8 mt-4 sm:mt-8">
+                <div className="lg:col-span-1">
+                  {stocks.length > 0 ? (
+                    <StockList
+                      stocks={stocks}
+                      selectedStock={selectedStock}
+                      onSelectStock={handleStockSelect}
+                      favorites={favorites}
+                      onToggleFavorite={toggleFavorite}
+                      isLoading={isLoading}
+                    />
+                  ) : null}
+                </div>
                 
-                {selectedStock && <Analysis selectedStock={selectedStock} />}
+                <div className="lg:col-span-3 space-y-4 sm:space-y-8">
+                  <Favorites 
+                    favorites={favorites} 
+                    onSelectStock={setSelectedStock}
+                    onToggleFavorite={toggleFavorite}
+                  />
+                  
+                  {selectedStock && <Analysis selectedStock={selectedStock} />}
+                </div>
               </div>
-            </div>
-          )}
-        </Content>
+            )}
+          </Content>
+        </Layout>
       </Layout>
     </Router>
   );
