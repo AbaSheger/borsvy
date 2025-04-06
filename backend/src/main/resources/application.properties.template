@@ -1,0 +1,31 @@
+# API Keys
+polygon.api.key=your_polygon_api_key
+finnhub.api.key=your_finnhub_api_key
+serpapi.api.key=your_serpapi_api_key
+huggingface.api.key=your_huggingface_api_key
+
+# Database Configuration
+spring.datasource.url=jdbc:h2:file:./data/borsvy
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=password
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.jpa.hibernate.ddl-auto=update
+
+# H2 Console
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+
+# Server Configuration
+server.port=8080
+
+# CORS Configuration
+cors.allowed.origins=http://localhost:3000
+
+# Cache Configuration
+spring.cache.type=caffeine
+spring.cache.caffeine.spec=maximumSize=100,expireAfterWrite=1h
+
+# Logging Configuration
+logging.level.root=INFO
+logging.level.com.borsvy=DEBUG 
