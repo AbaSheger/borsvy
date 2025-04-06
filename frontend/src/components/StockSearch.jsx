@@ -59,7 +59,7 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
     debouncedSearch(value);
   };
 
-  // Handle search with rate limiting
+  // Handle search with rate limiting and auto-navigation
   const handleSearch = async () => {
     if (!query.trim()) return;
 
@@ -73,7 +73,15 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
     try {
       setIsSearching(true);
       const response = await axios.get(`${API_URL}/api/stocks/search?query=${query}`, axiosConfig);
-      onSearch(response.data);
+      
+      // If there's exactly one result, navigate directly to analysis
+      if (response.data.length === 1) {
+        navigate(`/analysis/${response.data[0].symbol}`);
+      } else {
+        // Otherwise, show the search results
+        onSearch(response.data);
+      }
+      
       setShowSuggestions(false);
       setLastSearchTime(Date.now());
     } catch (error) {
@@ -87,11 +95,13 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
     }
   };
 
-  // Handle suggestion selection
+  // Handle suggestion selection with direct navigation
   const handleSuggestionSelect = (stock) => {
     setQuery(stock.symbol);
     setShowSuggestions(false);
-    onSearch([stock]);
+    
+    // Navigate directly to the analysis page
+    navigate(`/analysis/${stock.symbol}`);
   };
 
   // Handle keyboard navigation
@@ -249,7 +259,8 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
                 key={symbol}
                 onClick={() => {
                   setQuery(symbol);
-                  handleSearch();
+                  // Navigate directly to analysis for trending stocks
+                  navigate(`/analysis/${symbol}`);
                 }}
                 className="group relative p-4 bg-[#1a1a1a] rounded-xl border border-[#333333] 
                          hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20 

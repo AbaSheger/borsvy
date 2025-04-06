@@ -98,7 +98,8 @@ function SearchBar({ onSearch }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by company name or ticker symbol..."
-          className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block"
+          className="w-full pl-10 pr-4 py-3 bg-[#262626] border border-[#333333] text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block placeholder-gray-400"
+          style={{ color: 'white', caretColor: 'white', fontWeight: 500 }}
         />
         {isLoading && (
           <div className="absolute right-3 top-3">

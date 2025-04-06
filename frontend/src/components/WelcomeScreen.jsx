@@ -1,8 +1,11 @@
 import PropTypes from 'prop-types';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Tooltip } from 'antd';
+import { useNavigate } from 'react-router-dom';
 
 function WelcomeScreen() {
+  const navigate = useNavigate();
+  
   // Static popular stocks data
   const popularStocks = [
     { symbol: 'AAPL', name: 'Apple Inc.' },
@@ -12,6 +15,11 @@ function WelcomeScreen() {
     { symbol: 'META', name: 'Meta Platforms Inc.' },
     { symbol: 'TSLA', name: 'Tesla Inc.' }
   ];
+
+  // Function to handle stock click
+  const handleStockClick = (symbol) => {
+    navigate(`/analysis/${symbol}`);
+  };
 
   return (
     <div className="w-full max-w-7xl mx-auto">
@@ -46,6 +54,7 @@ function WelcomeScreen() {
             {popularStocks.map(stock => (
               <button
                 key={stock.symbol}
+                onClick={() => handleStockClick(stock.symbol)}
                 className="group relative p-4 bg-gray-800 rounded-xl border border-gray-700 
                          hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20 
                          transition-all duration-300 overflow-hidden transform hover:-translate-y-1"
@@ -67,4 +76,4 @@ function WelcomeScreen() {
   );
 }
 
-export default WelcomeScreen; 
+export default WelcomeScreen;

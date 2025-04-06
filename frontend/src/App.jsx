@@ -200,7 +200,8 @@ const AppContent = () => {
             </div>
           )}
 
-          {!stocks.length && !selectedStock ? (
+          {/* Only show welcome screen on home route when no stocks or selected stock */}
+          {!stocks.length && !selectedStock && location.pathname === '/' ? (
             <div className="flex justify-center items-center min-h-[calc(100vh-300px)] -mt-8">
               <WelcomeScreen />
             </div>

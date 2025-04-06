@@ -80,6 +80,15 @@ public class AnalysisService {
             
             Stock stock = stockOpt.get();
             
+            // Add core stock data directly to the analysis result for the dashboard cards
+            analysis.put("symbol", stock.getSymbol());
+            analysis.put("name", stock.getName());
+            analysis.put("price", stock.getPrice());
+            analysis.put("change", stock.getChange());
+            analysis.put("changePercent", stock.getChangePercent());
+            analysis.put("volume", stock.getVolume());
+            analysis.put("marketCap", stock.getMarketCap());
+            
             // Get technical analysis
             Map<String, Object> technicalAnalysis = getTechnicalAnalysis(stock);
             analysis.put("technical", technicalAnalysis);
