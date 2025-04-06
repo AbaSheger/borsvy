@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
-import { InfoCircleOutlined, SearchOutlined, LoadingOutlined, FireOutlined, StarOutlined, StarFilled } from '@ant-design/icons';
-import { Tooltip, Input, Spin, ConfigProvider, List, Card, Button, message } from 'antd';
+import { InfoCircleOutlined, SearchOutlined, LoadingOutlined, FireOutlined, StarOutlined, StarFilled, BarChartOutlined } from '@ant-design/icons';
+import { Tooltip, Input, Spin, ConfigProvider, List, Card, Button, message, Badge } from 'antd';
 import debounce from 'lodash/debounce';
 import { API_URL, axiosConfig } from '../config';
 import { useNavigate } from 'react-router-dom';
@@ -158,6 +158,13 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
           </div>
         </div>
 
+        {/* Search Instructions */}
+        <div className="mb-4 text-center bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl">
+          <p className="text-blue-400 font-medium">
+            <InfoCircleOutlined className="mr-1" /> Search for a stock symbol or company name, then click on a result to view detailed analysis
+          </p>
+        </div>
+
         {/* Search Section */}
         <div className="relative mb-12">
           <div className="relative">
@@ -175,6 +182,11 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
                   <SearchOutlined className="text-blue-400 text-xl" />
                 )
               }
+              suffix={
+                <Tooltip title="Type a stock symbol or company name to see results">
+                  <InfoCircleOutlined className="text-gray-400" />
+                </Tooltip>
+              }
               className="w-full h-16 text-lg rounded-xl shadow-lg hover:shadow-blue-500/20 transition-all duration-300"
               style={{ backgroundColor: '#262626', color: '#e6e6e6', borderColor: '#333333' }}
             />
@@ -184,6 +196,12 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
         {/* Suggestions Dropdown */}
         {showSuggestions && suggestions.length > 0 && (
           <div className="absolute z-10 w-full mt-2 bg-[#1a1a1a] rounded-xl shadow-2xl border border-[#333333] max-h-96 overflow-y-auto backdrop-blur-lg">
+            <div className="bg-blue-500/20 px-4 py-2 border-b border-[#333333]">
+              <p className="text-blue-400 text-sm font-medium flex items-center">
+                <BarChartOutlined className="mr-1" /> 
+                Click on a stock to view detailed analysis and charts
+              </p>
+            </div>
             {suggestions.map((stock, index) => (
               <div
                 key={stock.symbol}
@@ -221,7 +239,7 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
               <FireOutlined className="text-orange-500 text-2xl" />
               <h3 className="text-2xl font-bold text-[#e6e6e6]">Trending Stocks</h3>
             </div>
-            <Tooltip title="Click to quickly view popular stocks">
+            <Tooltip title="Click on any stock to see detailed analysis, charts, and news">
               <InfoCircleOutlined className="text-gray-400 text-xl" />
             </Tooltip>
           </div>
@@ -271,30 +289,72 @@ function StockSearch({ onSearch, isLoading, popularStocks, onToggleFavorite, fav
 
         {/* Search Results */}
         <div className="mt-16">
+          {suggestions.length > 0 && (
+            <div className="mb-4 bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl">
+              <p className="text-blue-400 font-medium flex items-center">
+                <BarChartOutlined className="mr-2" /> 
+                Click on any stock card below to view detailed analysis, charts, and latest news
+              </p>
+            </div>
+          )}
           <List
-            grid={{ gutter: 16, column: 4 }}
+            grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4 }}
             dataSource={isLoading ? [] : suggestions}
             renderItem={(stock) => (
               <List.Item>
-                <Card
-                  hoverable
-                  onClick={() => handleStockClick(stock.symbol)}
-                  actions={[
-                    <Button
-                      type="text"
-                      icon={favorites.some(f => f.symbol === stock.symbol) ? <StarFilled /> : <StarOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleFavorite(stock);
-                      }}
+                <Badge.Ribbon text="Click for Analysis" color="blue">
+                  <Card
+                    hoverable
+                    onClick={() => handleStockClick(stock.symbol)}
+                    className="transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/20 border border-[#333333]"
+                    cover={
+                      <div className="h-24 bg-gradient-to-r from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+                        <span className="text-3xl font-bold text-white">{stock.symbol}</span>
+                      </div>
+                    }
+                    actions={[
+                      <Tooltip title="View detailed analysis" key="analysis">
+                        <Button 
+                          type="text" 
+                          icon={<BarChartOutlined />} 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStockClick(stock.symbol);
+                          }}
+                        />
+                      </Tooltip>,
+                      <Tooltip title={favorites.some(f => f.symbol === stock.symbol) ? "Remove from favorites" : "Add to favorites"} key="favorite">
+                        <Button
+                          type="text"
+                          icon={favorites.some(f => f.symbol === stock.symbol) ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleFavorite(stock);
+                          }}
+                        />
+                      </Tooltip>
+                    ]}
+                  >
+                    <Card.Meta
+                      title={
+                        <div className="flex justify-between items-center">
+                          <span>{stock.symbol}</span>
+                          <span className={`text-sm font-bold ${
+                            stock.changePercent >= 0 ? 'text-green-500' : 'text-red-500'
+                          }`}>
+                            {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent?.toFixed(2)}%
+                          </span>
+                        </div>
+                      }
+                      description={
+                        <div>
+                          <p className="truncate">{stock.name}</p>
+                          <p className="font-semibold">${stock.price?.toFixed(2) || 'N/A'}</p>
+                        </div>
+                      }
                     />
-                  ]}
-                >
-                  <Card.Meta
-                    title={stock.symbol}
-                    description={stock.name}
-                  />
-                </Card>
+                  </Card>
+                </Badge.Ribbon>
               </List.Item>
             )}
           />

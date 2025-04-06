@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, Spin, message } from 'antd';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { axiosConfig } from '../config';
 import StockChart from './StockChart';
@@ -108,6 +109,17 @@ const Analysis = ({ selectedStock }) => {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
+      {/* User guidance banner */}
+      <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-2xl">
+        <h3 className="text-lg font-semibold text-blue-400 mb-2 flex items-center">
+          <InfoCircleOutlined className="mr-2" /> 
+          {analysis.name} ({symbol}) Analysis Dashboard
+        </h3>
+        <p className="text-gray-300">
+          You're viewing comprehensive stock analysis for {analysis.name}. Explore price data, technical indicators, sentiment analysis, and news below.
+        </p>
+      </div>
+      
       <div className="bg-[#1a1a1a] rounded-2xl shadow-lg p-4 sm:p-6 border border-[#333333]">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
