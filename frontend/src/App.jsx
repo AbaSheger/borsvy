@@ -56,7 +56,7 @@ const SidebarNavigation = ({ collapsed, onClose }) => {
   );
 };
 
-// Create a separate component for the app content that can use router hooks
+// AppContent component that will be rendered inside the Router
 const AppContent = () => {
   const [stocks, setStocks] = useState([]);
   const [selectedStock, setSelectedStock] = useState(null);
@@ -66,7 +66,7 @@ const AppContent = () => {
   const [favoritesError, setFavoritesError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 768);
-  const location = useLocation(); // This is now safe to use here
+  const location = useLocation(); // Now this is being used safely inside the Router context
   
   // Clear selected stock when navigating to favorites page
   useEffect(() => {
@@ -269,7 +269,7 @@ const AppContent = () => {
   );
 };
 
-// Main App function that provides the Router context
+// Main App function - only responsible for setting up the Router
 function App() {
   return (
     <Router future={routerFutureConfig}>
