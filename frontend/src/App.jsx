@@ -70,6 +70,7 @@ const AppContent = () => {
   const [loading, setLoading] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 768);
   const location = useLocation(); // Now this is being used safely inside the Router context
+  const { theme } = useTheme();
   
   // Clear selected stock when navigating to favorites page
   useEffect(() => {
@@ -111,7 +112,12 @@ const AppContent = () => {
   const handleSearch = async (searchResults) => {
     try {
       setStocks(searchResults);
-      setSelectedStock(null);
+      // Automatically select the first stock from search results if available
+      if (searchResults && searchResults.length > 0) {
+        setSelectedStock(searchResults[0]);
+      } else {
+        setSelectedStock(null);
+      }
       setError(null);
     } catch (err) {
       console.error('Search error:', err);
@@ -147,6 +153,14 @@ const AppContent = () => {
     fetchFavorites();
   }, []);
 
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.body.classList.add('dark');
+    } else {
+      document.body.classList.remove('dark');
+    }
+  }, [theme]);
+
   return (
     <Layout className="min-h-screen">
       <Sider 
@@ -161,7 +175,7 @@ const AppContent = () => {
           <Link to="/" className="flex items-center">
             <div className="transform transition-all duration-300">
               <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-0.5 rounded-lg shadow-md">
-                <div className="bg-[#1a1a1a] rounded-md px-3 py-1">
+                <div className={`${theme === 'dark' ? 'bg-[#1a1a1a]' : 'bg-white'} rounded-md px-3 py-1`}>
                   <span className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-tight">
                     Bö<span className="text-yellow-400">rs</span>vy
                   </span>
@@ -293,6 +307,16 @@ const AppContent = () => {
 
 // Main App function - only responsible for setting up the Router
 function App() {
+  const { theme } = useTheme();
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.body.classList.add('dark');
+    } else {
+      document.body.classList.remove('dark');
+    }
+  }, [theme]);
+
   return (
     <Router future={routerFutureConfig}>
       <AppContent />

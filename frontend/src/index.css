@@ -51,3 +51,56 @@ body {
     @apply dark:bg-[#333333] dark:hover:bg-[#3a3a3a] dark:text-gray-200;
   }
 }
+
+/* Search input placeholder styles */
+.ant-input {
+  @apply placeholder-gray-500;
+}
+
+.dark .ant-input {
+  @apply placeholder-[#e6e6e6];
+}
+
+/* Light theme placeholder */
+.ant-input::placeholder {
+  color: #666666 !important;
+}
+
+/* Dark theme placeholder */
+body.dark .ant-input::placeholder {
+  color: #e6e6e6 !important;
+}
+
+/* Theme-aware input styling */
+.theme-input {
+  background-color: var(--input-bg);
+  color: var(--input-text);
+}
+
+.theme-input:hover,
+.theme-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-color-light);
+}
+
+/* Light theme input */
+.light-input {
+  background-color: #f5f5f5;
+  color: #333333;
+  border-color: #d9d9d9;
+}
+
+.light-input::placeholder {
+  color: #666666;
+}
+
+/* Dark theme input */
+.dark-input {
+  background-color: #262626;
+  color: #e6e6e6;
+  border-color: #333333;
+}
+
+.dark-input::placeholder {
+  color: #e6e6e6;
+}

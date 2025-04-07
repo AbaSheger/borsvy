@@ -112,8 +112,13 @@ public class SerpApiClient {
         List<Map<String, Object>> newsArticles = new ArrayList<>();
         
         try {
-            // Create more specific search query
-            String searchQuery = symbol + " stock market news financial analysis earnings";
+            // Create more specific search query based on the company
+            String searchQuery;
+            if (symbol.equals("AAPL")) {
+                searchQuery = "Apple Inc stock market news financial analysis earnings";
+            } else {
+                searchQuery = symbol + " stock market news financial analysis earnings";
+            }
             
             // Create URL for SerpAPI news search with additional parameters
             String url = apiUrl + 
