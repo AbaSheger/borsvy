@@ -20,6 +20,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.HashMap;
+import java.util.stream.Collectors;
+import com.borsvy.model.NewsArticle;
 
 @RestController
 @RequestMapping("/api/stocks")
@@ -103,7 +106,19 @@ public class StockController {
             @PathVariable String symbol,
             @RequestParam(defaultValue = "5") int limit) {
         try {
-            List<Map<String, Object>> news = stockService.getStockNews(symbol, limit);
+            List<NewsArticle> newsArticles = stockService.getStockNews(symbol, limit);
+            List<Map<String, Object>> news = newsArticles.stream()
+                .map(article -> {
+                    Map<String, Object> articleMap = new HashMap<>();
+                    articleMap.put("title", article.getTitle());
+                    articleMap.put("url", article.getUrl());
+                    articleMap.put("date", article.getPublishedDate());
+                    articleMap.put("thumbnail", article.getThumbnail());
+                    articleMap.put("source", article.getSource());
+                    articleMap.put("summary", article.getSummary());
+                    return articleMap;
+                })
+                .collect(Collectors.toList());
             return ResponseEntity.ok(news);
         } catch (Exception e) {
             logger.error("Error fetching news for {}: {}", symbol, e.getMessage());

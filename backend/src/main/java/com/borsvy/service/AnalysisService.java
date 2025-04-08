@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 
 import com.borsvy.client.PolygonClient;
 import com.borsvy.model.StockPrice;
+import com.borsvy.model.NewsArticle;
 
 @Slf4j
 @Service
@@ -79,15 +80,15 @@ public class AnalysisService {
             }
             
             Stock stock = stockOpt.get();
+            analysis.put("stock", stock);
             
-            // Add core stock data directly to the analysis result for the dashboard cards
-            analysis.put("symbol", stock.getSymbol());
-            analysis.put("name", stock.getName());
-            analysis.put("price", stock.getPrice());
-            analysis.put("change", stock.getChange());
-            analysis.put("changePercent", stock.getChangePercent());
-            analysis.put("volume", stock.getVolume());
-            analysis.put("marketCap", stock.getMarketCap());
+            // Get news sentiment
+            Map<String, Object> sentimentData = stockService.getNewsSentiment(symbol);
+            analysis.put("newsSentiment", sentimentData);
+            
+            // Get LLM analysis
+            Map<String, Object> llmAnalysis = llmAnalysisService.generateAnalysis(symbol);
+            analysis.put("llmAnalysis", llmAnalysis);
             
             // Get technical analysis
             Map<String, Object> technicalAnalysis = getTechnicalAnalysis(stock);
@@ -97,24 +98,29 @@ public class AnalysisService {
             Map<String, Object> fundamentalAnalysis = getFundamentalAnalysis(stock);
             analysis.put("fundamental", fundamentalAnalysis);
             
-            // Get LLM analysis
-            Map<String, Object> llmAnalysis = llmAnalysisService.generateAnalysis(symbol);
-            analysis.put("llm", llmAnalysis);
-            
             // Get news data
-            List<Map<String, Object>> news = stockService.getStockNews(symbol, 5);
+            List<NewsArticle> newsArticles = stockService.getStockNews(symbol, 5);
+            List<Map<String, Object>> news = newsArticles.stream()
+                .map(article -> {
+                    Map<String, Object> articleMap = new HashMap<>();
+                    articleMap.put("title", article.getTitle());
+                    articleMap.put("url", article.getUrl());
+                    articleMap.put("date", article.getPublishedDate());
+                    articleMap.put("thumbnail", article.getThumbnail());
+                    articleMap.put("source", article.getSource());
+                    articleMap.put("summary", article.getSummary());
+                    return articleMap;
+                })
+                .collect(Collectors.toList());
             analysis.put("recentNews", news);
-            
-            // Get news sentiment
-            Map<String, Object> newsSentiment = stockService.getNewsSentiment(symbol);
-            analysis.put("newsSentiment", newsSentiment);
             
             // Combine all analyses into a comprehensive summary
             String summary = generateComprehensiveSummary(technicalAnalysis, fundamentalAnalysis, llmAnalysis);
             analysis.put("summary", summary);
             
             // Add overall sentiment
-            analysis.put("overallSentiment", determineOverallSentiment(technicalAnalysis, fundamentalAnalysis, llmAnalysis));
+            Map<String, Object> overallSentiment = determineOverallSentiment(technicalAnalysis, fundamentalAnalysis, llmAnalysis);
+            analysis.put("overallSentiment", overallSentiment);
             
             // Update cache
             analysisCache.put(symbol, analysis);
@@ -208,12 +214,15 @@ public class AnalysisService {
         return analysis;
     }
     
-    private String generateComprehensiveSummary(Map<String, Object> technical, Map<String, Object> fundamental, Map<String, Object> llm) {
+    private String generateComprehensiveSummary(Map<String, Object> technical, Map<String, Object> fundamental, Object llmAnalysis) {
         StringBuilder summary = new StringBuilder();
         
         // Add LLM analysis
-        if (llm.containsKey("analysis")) {
-            summary.append("AI Analysis:\n").append(llm.get("analysis")).append("\n\n");
+        if (llmAnalysis instanceof Map) {
+            Map<?, ?> llmMap = (Map<?, ?>) llmAnalysis;
+            if (llmMap.containsKey("analysis")) {
+                summary.append("AI Analysis:\n").append(llmMap.get("analysis")).append("\n\n");
+            }
         }
         
         // Add technical analysis summary
@@ -235,10 +244,31 @@ public class AnalysisService {
         return summary.toString();
     }
     
-    private String determineOverallSentiment(Map<String, Object> technical, Map<String, Object> fundamental, Map<String, Object> llm) {
+    private Map<String, Object> determineOverallSentiment(Map<String, Object> technical, Map<String, Object> fundamental, Object llmAnalysis) {
         // Get sentiment from LLM analysis
-        String llmSentiment = (String) llm.getOrDefault("sentiment", "neutral");
-        Double llmConfidence = (Double) llm.getOrDefault("confidence", 0.5);
+        String llmSentiment = "neutral";
+        double llmConfidence = 0.5;
+        String llmAnalysisText = "";
+        int llmScore = 0;
+        
+        if (llmAnalysis instanceof Map) {
+            Map<?, ?> llmMap = (Map<?, ?>) llmAnalysis;
+            if (llmMap.containsKey("sentiment")) {
+                llmSentiment = (String) llmMap.get("sentiment");
+                // Calculate LLM score based on sentiment and confidence
+                if (llmMap.containsKey("confidence")) {
+                    llmConfidence = ((Number) llmMap.get("confidence")).doubleValue();
+                    if (llmSentiment.equals("positive")) {
+                        llmScore = (int)(llmConfidence * 100);
+                    } else if (llmSentiment.equals("negative")) {
+                        llmScore = -(int)(llmConfidence * 100);
+                    }
+                }
+            }
+            if (llmMap.containsKey("analysis")) {
+                llmAnalysisText = (String) llmMap.get("analysis");
+            }
+        }
         
         // Get technical trend
         String technicalTrend = (String) technical.getOrDefault("trend", "neutral");
@@ -246,29 +276,101 @@ public class AnalysisService {
         // Get fundamental signals
         Map<String, String> fundamentalSignals = (Map<String, String>) fundamental.getOrDefault("signals", new HashMap<>());
         
-        // Weight the different analyses
-        int sentimentScore = 0;
+        // Calculate sentiment distribution
+        int positiveCount = 0;
+        int negativeCount = 0;
+        int neutralCount = 0;
         
-        // LLM sentiment weight (based on confidence)
-        if (llmSentiment.equals("positive")) sentimentScore += (int)(llmConfidence * 100);
-        else if (llmSentiment.equals("negative")) sentimentScore -= (int)(llmConfidence * 100);
-        
-        // Technical trend weight
-        if (technicalTrend.equals("bullish")) sentimentScore += 30;
-        else if (technicalTrend.equals("bearish")) sentimentScore -= 30;
-        
-        // Fundamental signals weight
-        if (fundamentalSignals.containsKey("Valuation")) {
-            String valuation = fundamentalSignals.get("Valuation");
-            if (valuation.contains("undervalued")) sentimentScore += 20;
-            else if (valuation.contains("overvalued")) sentimentScore -= 20;
+        // LLM sentiment contribution
+        if (llmSentiment.equals("positive")) {
+            positiveCount++;
+        } else if (llmSentiment.equals("negative")) {
+            negativeCount++;
+        } else {
+            neutralCount++;
         }
         
-        // Determine overall sentiment
-        if (sentimentScore > 50) return "strongly positive";
-        else if (sentimentScore > 20) return "positive";
-        else if (sentimentScore < -50) return "strongly negative";
-        else if (sentimentScore < -20) return "negative";
+        // Technical trend contribution
+        if (technicalTrend.equals("bullish")) {
+            positiveCount++;
+        } else if (technicalTrend.equals("bearish")) {
+            negativeCount++;
+        } else {
+            neutralCount++;
+        }
+        
+        // Fundamental signals contribution
+        if (fundamentalSignals.containsKey("Valuation")) {
+            String valuation = fundamentalSignals.get("Valuation");
+            if (valuation.contains("undervalued")) {
+                positiveCount++;
+            } else if (valuation.contains("overvalued")) {
+                negativeCount++;
+            } else {
+                neutralCount++;
+            }
+        } else {
+            neutralCount++;
+        }
+        
+        // Create detailed sentiment response
+        Map<String, Object> sentimentResponse = new HashMap<>();
+        sentimentResponse.put("sentiment", determineSentimentCategory(llmScore));
+        sentimentResponse.put("score", llmScore);
+        sentimentResponse.put("llmSentiment", llmSentiment);
+        sentimentResponse.put("llmConfidence", llmConfidence);
+        sentimentResponse.put("llmAnalysis", llmAnalysisText);
+        sentimentResponse.put("technicalTrend", technicalTrend);
+        sentimentResponse.put("fundamentalSignals", fundamentalSignals);
+        
+        // Add sentiment distribution
+        Map<String, Integer> distribution = new HashMap<>();
+        distribution.put("positive", positiveCount);
+        distribution.put("negative", negativeCount);
+        distribution.put("neutral", neutralCount);
+        sentimentResponse.put("distribution", distribution);
+        
+        // Add detailed analysis breakdown
+        List<Map<String, Object>> analysisBreakdown = new ArrayList<>();
+        
+        // Add LLM analysis
+        Map<String, Object> llmBreakdown = new HashMap<>();
+        llmBreakdown.put("source", "AI Analysis");
+        llmBreakdown.put("sentiment", llmSentiment);
+        llmBreakdown.put("confidence", llmConfidence);
+        llmBreakdown.put("score", llmScore);
+        llmBreakdown.put("analysis", llmAnalysisText);
+        analysisBreakdown.add(llmBreakdown);
+        
+        // Add technical analysis
+        Map<String, Object> technicalBreakdown = new HashMap<>();
+        technicalBreakdown.put("source", "Technical Analysis");
+        technicalBreakdown.put("sentiment", technicalTrend.equals("bullish") ? "positive" : technicalTrend.equals("bearish") ? "negative" : "neutral");
+        technicalBreakdown.put("analysis", "Based on technical indicators and price trends");
+        analysisBreakdown.add(technicalBreakdown);
+        
+        // Add fundamental analysis
+        Map<String, Object> fundamentalBreakdown = new HashMap<>();
+        fundamentalBreakdown.put("source", "Fundamental Analysis");
+        String fundamentalSentiment = "neutral";
+        if (fundamentalSignals.containsKey("Valuation")) {
+            fundamentalSentiment = fundamentalSignals.get("Valuation").contains("undervalued") ? "positive" : 
+                                 fundamentalSignals.get("Valuation").contains("overvalued") ? "negative" : "neutral";
+        }
+        fundamentalBreakdown.put("sentiment", fundamentalSentiment);
+        fundamentalBreakdown.put("analysis", "Based on valuation metrics and financial indicators");
+        analysisBreakdown.add(fundamentalBreakdown);
+        
+        sentimentResponse.put("analysisBreakdown", analysisBreakdown);
+        
+        return sentimentResponse;
+    }
+    
+    private String determineSentimentCategory(int score) {
+        if (score > 50) return "strongly positive";
+        else if (score > 20) return "positive";
+        else if (score < -50) return "strongly negative";
+        else if (score < -20) return "negative";
         else return "neutral";
     }
     

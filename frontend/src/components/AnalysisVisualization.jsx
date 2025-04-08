@@ -344,23 +344,33 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
                 />
               )}
             </div>
-            {analysis.llm && (
+            {analysis.overallSentiment && (
               <div className="mt-3 sm:mt-4">
                 <h4 className="text-base sm:text-lg font-medium mb-3 text-white">✨ AI Analysis</h4>
                 <div className="bg-gray-700 p-4 rounded-xl">
                   <p className="mb-2 text-white">
                     <span className="font-medium">Sentiment:</span>{' '}
                     <span className={`${
-                      analysis.llm.sentiment === 'positive' ? 'text-green-500 font-bold' :
-                      analysis.llm.sentiment === 'negative' ? 'text-red-500 font-bold' :
+                      analysis.overallSentiment.sentiment === 'positive' || analysis.overallSentiment.sentiment === 'strongly positive' ? 'text-green-500 font-bold' :
+                      analysis.overallSentiment.sentiment === 'negative' || analysis.overallSentiment.sentiment === 'strongly negative' ? 'text-red-500 font-bold' :
                       'text-yellow-500 font-bold'
                     }`}>
-                      {analysis.llm.sentiment.charAt(0).toUpperCase() + analysis.llm.sentiment.slice(1)}
+                      {analysis.overallSentiment.sentiment.charAt(0).toUpperCase() + analysis.overallSentiment.sentiment.slice(1)}
+                    </span>
+                  </p>
+                  <p className="mb-2 text-white">
+                    <span className="font-medium">Score:</span>{' '}
+                    <span className={`${
+                      analysis.overallSentiment.score > 0 ? 'text-green-500 font-bold' :
+                      analysis.overallSentiment.score < 0 ? 'text-red-500 font-bold' :
+                      'text-yellow-500 font-bold'
+                    }`}>
+                      {analysis.overallSentiment.score}
                     </span>
                   </p>
                   <p className="text-white">
                     <span className="font-medium">Confidence:</span>{' '}
-                    {(analysis.llm.confidence * 100).toFixed(1)}%
+                    {(analysis.overallSentiment.llmConfidence * 100).toFixed(1)}%
                   </p>
                 </div>
               </div>

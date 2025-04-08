@@ -20,6 +20,8 @@ import com.borsvy.model.Quote;
 import com.borsvy.model.CompanyProfile2;
 import lombok.extern.slf4j.Slf4j;
 import com.borsvy.client.PolygonClient;
+import com.borsvy.client.RapidApiClient;
+import com.borsvy.model.NewsArticle;
 
 import java.util.*;
 import java.time.LocalDateTime;
@@ -39,6 +41,7 @@ public class StockService {
     private final FinnhubClient finnhubClient;
     private final SerpApiClient serpApiClient;
     private final PolygonClient polygonClient;
+    private final RapidApiClient rapidApiClient;
     private final Map<String, CachedStock> stockCache = new ConcurrentHashMap<>();
     private final Map<String, CachedStockDetails> detailsCache = new ConcurrentHashMap<>();
     private List<Stock> cachedPopularStocks;
@@ -52,11 +55,13 @@ public class StockService {
     public StockService(StockRepository stockRepository, 
                        FinnhubClient finnhubClient, 
                        SerpApiClient serpApiClient,
-                       PolygonClient polygonClient) {
+                       PolygonClient polygonClient,
+                       RapidApiClient rapidApiClient) {
         this.stockRepository = stockRepository;
         this.finnhubClient = finnhubClient;
         this.serpApiClient = serpApiClient;
         this.polygonClient = polygonClient;
+        this.rapidApiClient = rapidApiClient;
     }
 
     @Retryable(
@@ -330,14 +335,34 @@ public class StockService {
     }
     
     public Map<String, Object> getNewsSentiment(String symbol) {
-        return serpApiClient.getNewsSentiment(symbol);
+        try {
+            Map<String, Object> sentimentData = rapidApiClient.getNewsSentiment(symbol);
+            if (sentimentData.containsKey("error")) {
+                log.warn("Error getting news sentiment for {}: {}", symbol, sentimentData.get("error"));
+                return createDefaultSentimentResponse();
+            }
+            return sentimentData;
+        } catch (Exception e) {
+            log.error("Error getting news sentiment for {}: {}", symbol, e.getMessage());
+            return createDefaultSentimentResponse();
+        }
     }
     
-    public List<Map<String, Object>> getStockNews(String symbol, int limit) {
-        log.debug("Fetching {} news articles for {}", limit, symbol);
-        List<Map<String, Object>> news = serpApiClient.getStockNews(symbol, limit);
-        log.debug("Retrieved {} news articles for {}", news.size(), symbol);
-        return news;
+    private Map<String, Object> createDefaultSentimentResponse() {
+        Map<String, Object> defaultResponse = new HashMap<>();
+        defaultResponse.put("sentiment", "neutral");
+        defaultResponse.put("positiveCount", 0);
+        defaultResponse.put("negativeCount", 0);
+        defaultResponse.put("neutralCount", 0);
+        defaultResponse.put("totalArticles", 0);
+        defaultResponse.put("score", 0.0);
+        defaultResponse.put("analyzedArticles", new ArrayList<>());
+        return defaultResponse;
+    }
+    
+    public List<NewsArticle> getStockNews(String symbol, int limit) {
+        List<NewsArticle> articles = rapidApiClient.getStockNews(symbol, limit);
+        return articles;
     }
 
     private List<StockPrice> generateSyntheticHistoricalData(String symbol, String interval) {
