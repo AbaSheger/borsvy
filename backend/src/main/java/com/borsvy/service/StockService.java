@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.ThreadLocalRandom;
 import java.time.Duration;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -336,33 +337,107 @@ public class StockService {
     
     public Map<String, Object> getNewsSentiment(String symbol) {
         try {
-            Map<String, Object> sentimentData = rapidApiClient.getNewsSentiment(symbol);
-            if (sentimentData.containsKey("error")) {
-                log.warn("Error getting news sentiment for {}: {}", symbol, sentimentData.get("error"));
-                return createDefaultSentimentResponse();
+            log.info("Getting news sentiment for symbol: {}", symbol);
+            
+            // Try SerpApi first
+            try {
+                Map<String, Object> serpApiSentiment = serpApiClient.getNewsSentiment(symbol);
+                if (serpApiSentiment != null && !serpApiSentiment.containsKey("error")) {
+                    log.info("Successfully got sentiment from SerpApi");
+                    return serpApiSentiment;
+                }
+            } catch (Exception e) {
+                log.warn("Error getting sentiment from SerpApi: {}. Falling back to RapidApi", e.getMessage());
             }
-            return sentimentData;
+            
+            // Fallback to RapidApi
+            try {
+                Map<String, Object> rapidApiSentiment = rapidApiClient.getNewsSentiment(symbol);
+                if (rapidApiSentiment != null && !rapidApiSentiment.containsKey("error")) {
+                    log.info("Successfully got sentiment from RapidApi (fallback)");
+                    return rapidApiSentiment;
+                }
+            } catch (Exception e) {
+                log.error("Error getting sentiment from RapidApi (fallback): {}", e.getMessage());
+            }
+            
+            // If both APIs fail, return neutral sentiment
+            log.warn("Both sentiment APIs failed, returning neutral sentiment");
+            Map<String, Object> defaultSentiment = new HashMap<>();
+            defaultSentiment.put("sentiment", "neutral");
+            defaultSentiment.put("score", 0);
+            defaultSentiment.put("positiveCount", 0);
+            defaultSentiment.put("negativeCount", 0);
+            defaultSentiment.put("neutralCount", 1);
+            defaultSentiment.put("totalArticles", 1);
+            defaultSentiment.put("analyzedArticles", new ArrayList<>());
+            return defaultSentiment;
+            
         } catch (Exception e) {
-            log.error("Error getting news sentiment for {}: {}", symbol, e.getMessage());
-            return createDefaultSentimentResponse();
+            log.error("Error in getNewsSentiment: {}", e.getMessage());
+            Map<String, Object> errorSentiment = new HashMap<>();
+            errorSentiment.put("error", "Failed to analyze sentiment");
+            return errorSentiment;
         }
     }
     
-    private Map<String, Object> createDefaultSentimentResponse() {
-        Map<String, Object> defaultResponse = new HashMap<>();
-        defaultResponse.put("sentiment", "neutral");
-        defaultResponse.put("positiveCount", 0);
-        defaultResponse.put("negativeCount", 0);
-        defaultResponse.put("neutralCount", 0);
-        defaultResponse.put("totalArticles", 0);
-        defaultResponse.put("score", 0.0);
-        defaultResponse.put("analyzedArticles", new ArrayList<>());
-        return defaultResponse;
-    }
-    
     public List<NewsArticle> getStockNews(String symbol, int limit) {
-        List<NewsArticle> articles = rapidApiClient.getStockNews(symbol, limit);
-        return articles;
+        try {
+            log.info("Fetching news for symbol: {} with limit: {}", symbol, limit);
+            
+            // Try SerpApi first
+            List<Map<String, Object>> serpApiNews = null;
+            try {
+                serpApiNews = serpApiClient.getStockNews(symbol, limit);
+                if (serpApiNews != null && !serpApiNews.isEmpty()) {
+                    log.info("Successfully fetched {} news articles from SerpApi", serpApiNews.size());
+                    List<NewsArticle> articles = convertToNewsArticles(serpApiNews);
+                    if (!articles.isEmpty()) {
+                        return articles;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Error fetching news from SerpApi: {}. Falling back to RapidApi", e.getMessage());
+            }
+            
+            // Fallback to RapidApi
+            try {
+                List<NewsArticle> rapidApiNews = rapidApiClient.getStockNews(symbol, limit);
+                if (rapidApiNews != null && !rapidApiNews.isEmpty()) {
+                    log.info("Successfully fetched {} news articles from RapidApi (fallback)", rapidApiNews.size());
+                    return rapidApiNews;
+                }
+            } catch (Exception e) {
+                log.error("Error fetching news from RapidApi (fallback): {}", e.getMessage());
+            }
+            
+            // If both APIs fail, return empty list
+            log.warn("Both news APIs failed, returning empty list");
+            return new ArrayList<>();
+            
+        } catch (Exception e) {
+            log.error("Error in getStockNews: {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private List<NewsArticle> convertToNewsArticles(List<Map<String, Object>> articles) {
+        List<NewsArticle> newsArticles = new ArrayList<>();
+        for (Map<String, Object> article : articles) {
+            try {
+                NewsArticle newsArticle = new NewsArticle();
+                newsArticle.setTitle((String) article.get("title"));
+                newsArticle.setUrl((String) article.get("url"));
+                newsArticle.setSource((String) article.get("source"));
+                newsArticle.setPublishedDate((String) article.get("date"));
+                newsArticle.setSummary((String) article.get("summary"));
+                newsArticle.setThumbnail((String) article.get("thumbnail"));
+                newsArticles.add(newsArticle);
+            } catch (Exception e) {
+                log.warn("Error converting article: {}", e.getMessage());
+            }
+        }
+        return newsArticles;
     }
 
     private List<StockPrice> generateSyntheticHistoricalData(String symbol, String interval) {

@@ -198,21 +198,20 @@ public class SerpApiClient {
                     newsArticles.add(article);
                     log.debug("Added article: {}", article);
                     
-                    if (newsArticles.size() >= limit) break;
+                    if (newsArticles.size() >= limit) {
+                        break;
+                    }
                 }
-            } else {
-                log.warn("No news_results found in SerpAPI response");
             }
+            
+            log.info("Returning {} news articles for {}", newsArticles.size(), symbol);
+            return newsArticles;
             
         } catch (Exception e) {
             log.error("Error fetching news from SerpAPI: {}", e.getMessage());
-            Map<String, Object> errorArticle = new HashMap<>();
-            errorArticle.put("error", "Failed to fetch news: " + e.getMessage());
-            newsArticles.add(errorArticle);
+            // Return empty list instead of fake article
+            return new ArrayList<>();
         }
-        
-        log.info("Returning {} news articles for {}", newsArticles.size(), symbol);
-        return newsArticles;
     }
     
     private boolean isFutureDate(String dateStr) {

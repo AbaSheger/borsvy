@@ -280,6 +280,14 @@ public class RapidApiClient {
                                 
                                 // Check if the article is relevant to the stock
                                 String title = item.has("title") ? item.get("title").asText("") : "";
+                                
+                                // Only require title to be non-empty
+                                if (title.isEmpty()) {
+                                    log.debug("Skipping article with empty title");
+                                    continue;
+                                }
+                                
+                                // Check relevance
                                 if (isHighlyRelevant(title, symbol, companyName)) {
                                     NewsArticle article = extractArticle(item);
                                     if (article != null) {
@@ -294,6 +302,13 @@ public class RapidApiClient {
                         } else {
                             log.warn("No news array found in API response. Response structure: {}", 
                                 root.toString().substring(0, Math.min(500, root.toString().length())));
+                        }
+                        
+                        // If we didn't get enough articles, try the search API as fallback
+                        if (articles.size() < limit) {
+                            log.info("Not enough articles from news API, trying search API as fallback");
+                            List<NewsArticle> searchArticles = getNewsViaSearch(symbol, limit - articles.size());
+                            articles.addAll(searchArticles);
                         }
                         
                         return articles;
@@ -322,11 +337,16 @@ public class RapidApiClient {
             
             // Extract required fields
             String title = item.has("title") ? item.get("title").asText("") : "";
-            if (title.isEmpty()) return null;
+            if (title.isEmpty()) {
+                log.debug("Skipping article with empty title");
+                return null;
+            }
             
-            String link = item.has("url") ? item.get("url").asText("") :
-                         item.has("link") ? item.get("link").asText("") : "";
-            if (link.isEmpty()) return null;
+            String link = item.has("link") ? item.get("link").asText("") : "";
+            if (link.isEmpty()) {
+                log.debug("Skipping article with empty link");
+                return null;
+            }
             
             // Create article
             NewsArticle article = new NewsArticle();
@@ -338,72 +358,44 @@ public class RapidApiClient {
             article.setSource(source);
             
             // Date
-            String pubDate = item.has("time") ? item.get("time").asText("") :
-                           item.has("published_time") ? item.get("published_time").asText("") :
-                           item.has("pubDate") ? item.get("pubDate").asText("") : "";
+            String pubDate = item.has("pubDate") ? item.get("pubDate").asText("") : "";
             article.setPublishedDate(formatDate(pubDate));
             
-            // Summary
-            String summary = item.has("text") ? item.get("text").asText("") :
-                           item.has("description") ? item.get("description").asText("") :
-                           item.has("summary") ? item.get("summary").asText("") : "No summary available";
+            // Summary - use title if no summary available
+            String summary = item.has("text") ? item.get("text").asText("") : title;
             article.setSummary(summary);
             
             // Enhanced thumbnail handling
             String thumbnail = null;
             
-            // Log all available fields to help debug thumbnail issues
-            StringBuilder fields = new StringBuilder();
-            Iterator<String> fieldNames = item.fieldNames();
-            while (fieldNames.hasNext()) {
-                fields.append(fieldNames.next()).append(", ");
-            }
-            log.debug("Available fields in news item: {}", fields.toString());
-            
             // Try different possible thumbnail fields
             if (item.has("img") && !item.get("img").asText("").isEmpty()) {
                 thumbnail = item.get("img").asText("");
-                log.debug("Found thumbnail in 'img' field: {}", thumbnail);
             } else if (item.has("image_url") && !item.get("image_url").asText("").isEmpty()) {
                 thumbnail = item.get("image_url").asText("");
-                log.debug("Found thumbnail in 'image_url' field: {}", thumbnail);
             } else if (item.has("thumbnail") && !item.get("thumbnail").asText("").isEmpty()) {
                 thumbnail = item.get("thumbnail").asText("");
-                log.debug("Found thumbnail in 'thumbnail' field: {}", thumbnail);
             } else if (item.has("image") && !item.get("image").asText("").isEmpty()) {
                 thumbnail = item.get("image").asText("");
-                log.debug("Found thumbnail in 'image' field: {}", thumbnail);
-            } else if (item.has("media") && item.get("media").isObject()) {
-                JsonNode media = item.get("media");
-                if (media.has("thumbnail") && !media.get("thumbnail").asText("").isEmpty()) {
-                    thumbnail = media.get("thumbnail").asText("");
-                    log.debug("Found thumbnail in 'media.thumbnail' field: {}", thumbnail);
-                } else if (media.has("image") && !media.get("image").asText("").isEmpty()) {
-                    thumbnail = media.get("image").asText("");
-                    log.debug("Found thumbnail in 'media.image' field: {}", thumbnail);
-                }
             }
             
             // If no thumbnail found, try to extract from the article URL
             if (thumbnail == null || thumbnail.isEmpty()) {
                 try {
-                    // Try to get the article's main image from the URL
                     thumbnail = extractThumbnailFromUrl(link);
-                    if (thumbnail != null) {
-                        log.debug("Extracted thumbnail from URL: {}", thumbnail);
-                    }
                 } catch (Exception e) {
                     log.debug("Failed to extract thumbnail from URL: {}", e.getMessage());
                 }
             }
             
-            // If still no thumbnail found, use a default based on the source
+            // Set default thumbnail based on source if no thumbnail found
             if (thumbnail == null || thumbnail.isEmpty()) {
                 thumbnail = getDefaultThumbnailForSource(source);
-                log.debug("Using default thumbnail for article '{}': {}", title, thumbnail);
+                log.debug("Using default thumbnail for source: {}", source);
             }
             
             article.setThumbnail(thumbnail);
+            log.debug("Created article: {} with thumbnail: {}", title, thumbnail);
             
             return article;
         } catch (Exception e) {
