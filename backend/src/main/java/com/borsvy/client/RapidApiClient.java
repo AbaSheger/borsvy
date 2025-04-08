@@ -25,6 +25,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import java.util.Iterator;
+import java.util.Arrays;
 
 /**
  * Client for making API calls to Yahoo Finance via RapidAPI
@@ -602,10 +603,55 @@ public class RapidApiClient {
      * Check if article is highly relevant to the stock
      */
     private boolean isHighlyRelevant(String title, String symbol, String companyName) {
-        title = title.toLowerCase();
-        return title.contains(symbol.toLowerCase()) || 
-               (!companyName.isEmpty() && title.contains(companyName.toLowerCase())) ||
-               isProductRelevant(title, symbol);
+        String titleLower = title.toLowerCase();
+        String symbolLower = symbol.toLowerCase();
+        String companyLower = companyName.toLowerCase();
+
+        // Handle special cases for major companies
+        if (symbol.equals("GOOGL") || symbol.equals("GOOG")) {
+            String[] googleTerms = {"google", "alphabet", "googl", "goog", "tech giant", "search giant", "ai", "artificial intelligence", "cloud", "android"};
+            for (String term : googleTerms) {
+                if (titleLower.contains(term)) {
+                    return true;
+                }
+            }
+        }
+
+        // Check for exact matches first
+        if (titleLower.contains(symbolLower) || 
+            titleLower.contains(companyLower) || 
+            (companyLower.contains("google") && titleLower.contains("alphabet")) ||
+            (companyLower.contains("alphabet") && titleLower.contains("google"))) {
+            return true;
+        }
+
+        // Check for market-related terms with company context
+        String[] marketTerms = {
+            "stock", "shares", "market", "trading", "price", "investor", 
+            "earnings", "revenue", "profit", "growth", "performance",
+            "tech", "technology", "digital", "investment", "stake",
+            "nasdaq", "wall street", "market cap", "billion", "million"
+        };
+
+        // If title contains market terms and mentions major tech companies or "Mag 7"
+        if (Arrays.asList("AAPL", "GOOGL", "MSFT", "AMZN", "META", "NVDA", "TSLA").contains(symbol)) {
+            if (titleLower.contains("tech") || 
+                titleLower.contains("technology") || 
+                titleLower.contains("mag 7") || 
+                titleLower.contains("magnificent seven")) {
+                return true;
+            }
+        }
+
+        // Check if title contains both market terms and company references
+        for (String term : marketTerms) {
+            if (titleLower.contains(term) && 
+                (titleLower.contains(symbolLower) || titleLower.contains(companyLower))) {
+                return true;
+            }
+        }
+
+        return false;
     }
     
     /**
