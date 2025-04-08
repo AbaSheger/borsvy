@@ -2,6 +2,107 @@
 
 A web-based stock analysis platform built with React, Spring Boot, and multiple financial APIs, featuring AI analysis powered by Hugging Face.
 
+## Project Architecture
+
+### System Overview
+```mermaid
+graph TD
+    A[Frontend React] --> B[Backend Spring Boot]
+    B --> C[External APIs]
+    C --> D[Hugging Face]
+    A --> E[Nginx]
+    B --> F[H2 Database]
+    C --> G[RapidAPI]
+    
+    subgraph Frontend
+        A
+        E
+    end
+    
+    subgraph Backend
+        B
+        F
+    end
+    
+    subgraph External Services
+        C
+        D
+        G
+    end
+```
+
+### Frontend Architecture
+```mermaid
+graph TD
+    A[Pages] --> B[Components]
+    B --> C[Hooks]
+    C --> D[Services]
+    A --> E[Context]
+    B --> E
+    C --> E
+    D --> E
+    
+    subgraph Core
+        A
+        B
+        C
+        D
+    end
+    
+    subgraph State Management
+        E
+    end
+```
+
+### Backend Architecture
+```mermaid
+graph TD
+    A[Controllers] --> B[Services]
+    B --> C[Clients]
+    C --> D[Models]
+    A --> E[Config]
+    B --> E
+    C --> E
+    D --> E
+    
+    subgraph Business Logic
+        A
+        B
+        C
+        D
+    end
+    
+    subgraph Configuration
+        E
+    end
+```
+
+## Features
+
+### Stock Analysis Dashboard
+[![Stock Analysis Dashboard](screenshots/dashboard.png)](screenshots/dashboard.png)
+- Real-time stock data visualization
+- Interactive charts and technical indicators
+- Portfolio tracking and analysis
+
+### News and Sentiment Analysis
+[![News and Sentiment Analysis](screenshots/news-sentiment.png)](screenshots/news-sentiment.png)
+- Latest market news with sentiment analysis
+- AI-powered news relevance scoring
+- Sentiment distribution visualization
+
+### Technical Analysis
+[![Technical Analysis](screenshots/technical-analysis.png)](screenshots/technical-analysis.png)
+- Advanced charting tools
+- Technical indicators and patterns
+- Historical data analysis
+
+### AI-Powered Insights
+[![AI-Powered Insights](screenshots/ai-insights.png)](screenshots/ai-insights.png)
+- Machine learning-based predictions
+- Market trend analysis
+- Risk assessment
+
 ## Project Structure
 
 - **Frontend**: 
@@ -24,7 +125,7 @@ A web-based stock analysis platform built with React, Spring Boot, and multiple 
   - Polygon.io for historical data
   - SerpAPI for news analysis
   - Hugging Face for AI analysis
-- **Deployment**: Docker containers deployed on Koyeb
+- **Deployment**: Docker containers deployed on Railway
 
 ## Prerequisites
 
@@ -48,7 +149,7 @@ npm install
 
 3. Create a `.env` file with the following variables:
 ```
-VITE_API_URL=https://borsvy-backend-borsvy-295875c6.koyeb.app
+VITE_API_URL=https://borsvy-backend-production.up.railway.app
 ```
 
 4. Start the development server:
@@ -97,29 +198,26 @@ huggingface.api.key=${HUGGINGFACE_API_KEY}
 
 The backend API will be available at http://localhost:8080
 
-## Docker Deployment
+## Railway Deployment
 
-Both frontend and backend can be deployed using Docker:
+The application is deployed on Railway, a modern cloud platform that makes it easy to deploy and scale applications.
 
-### Frontend
+### Frontend Deployment
 ```bash
-cd frontend
-docker build -t borsvy-frontend .
-docker run -p 3000:3000 borsvy-frontend
+railway up --service frontend
 ```
 
-The frontend is served using Nginx with:
-- Gzip compression for better performance
-- Static file caching
-- React router support
-- Security headers
-
-### Backend
+### Backend Deployment
 ```bash
-cd backend
-docker build -t borsvy-backend .
-docker run -p 8080:8080 borsvy-backend
+railway up --service backend
 ```
+
+Railway automatically:
+- Builds and deploys Docker containers
+- Manages environment variables
+- Provides HTTPS endpoints
+- Scales resources as needed
+- Monitors application health
 
 ## API Keys
 
@@ -130,12 +228,12 @@ To use the application with full functionality, you'll need:
 3. A Polygon.io API key (https://polygon.io/)
 4. A Hugging Face API key (https://huggingface.co/)
 
-Add these keys to your environment variables or the application configuration.
+Add these keys to your Railway environment variables.
 
 ## Environment Variables
 
 ### Frontend
-- `VITE_API_URL`: The URL of the backend API (default: https://borsvy-backend-borsvy-295875c6.koyeb.app)
+- `VITE_API_URL`: The URL of the backend API (default: https://borsvy-backend-production.up.railway.app)
 
 ### Backend
 - `PORT`: Server port (default: 8080)
