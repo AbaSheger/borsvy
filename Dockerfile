@@ -14,4 +14,4 @@ RUN cd backend && chmod +x mvnw && ./mvnw clean package -DskipTests
 EXPOSE 8080
 
 # Define the command to run the application with memory limits
-CMD java -Xmx300m -jar /app/backend/target/*.jar 
+CMD java -Xmx256m -Xms128m -XX:MaxMetaspaceSize=64m -XX:+UseSerialGC -XX:+UseCompressedOops -XX:+OptimizeStringConcat -XX:+UseStringDeduplication -jar /app/backend/target/*.jar 
