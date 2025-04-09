@@ -13,5 +13,5 @@ RUN cd backend && chmod +x mvnw && ./mvnw clean package -DskipTests
 # Expose the port the application runs on
 EXPOSE 8080
 
-# Define the command to run the application
-CMD ["java", "-jar", "/app/backend/target/*.jar"] 
+# Define the command to run the application (using shell form for wildcard expansion)
+CMD java -jar /app/backend/target/*.jar 
