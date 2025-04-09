@@ -36,6 +36,16 @@ graph TD
         POLY
         HF
     end
+    
+    classDef frontend fill:#C7D2FE,stroke:#4F46E5,color:#111827;
+    classDef backend fill:#DBEAFE,stroke:#1D4ED8,color:#111827;
+    classDef database fill:#FDE68A,stroke:#CA8A04,color:#111827;
+    classDef external fill:#D1FAE5,stroke:#047857,color:#111827;
+    
+    class A frontend;
+    class B backend;
+    class DB database;
+    class FIN,SERP,RAPID,POLY,HF external;
 ```
 *   **Frontend:** A modern React application built with Vite, using Ant Design and Tailwind CSS for the UI. It interacts with the backend API.
 *   **Backend:** A robust Spring Boot application providing a REST API. It orchestrates calls to various external financial and AI APIs and manages data persistence using an H2 database.
@@ -49,9 +59,50 @@ graph TD
 
 ### Frontend Architecture (Simplified)
 React components fetch data from the backend API via services/hooks and display it using UI libraries.
+```mermaid
+graph LR
+    Comp[React Components] --> Hooks;
+    Hooks --> Serv[Services/API Utils];
+    Serv --> BE(Backend API);
+    
+    classDef component fill:#C7D2FE,stroke:#4F46E5,color:#111827;
+    classDef hook fill:#A5F3FC,stroke:#0891B2,color:#111827;
+    classDef service fill:#E0E7FF,stroke:#4338CA,color:#111827;
+    classDef api fill:#DBEAFE,stroke:#1D4ED8,color:#111827;
+    
+    class Comp component;
+    class Hooks hook;
+    class Serv service;
+    class BE api;
+```
 
 ### Backend Architecture (Simplified)
 Spring Controllers handle incoming requests, delegate business logic to Services, which in turn use Clients to interact with external APIs or Repositories to access the database.
+```mermaid
+graph LR
+    Req(Incoming Request) --> Ctrl[Controllers];
+    Ctrl --> Serv[Services];
+    Serv --> Clients;
+    Serv --> Repos[Repositories];
+    Clients --> ExtAPI(External APIs);
+    Repos --> DB(Database);
+    
+    classDef request fill:#FEF9C3,stroke:#EAB308,color:#111827;
+    classDef controller fill:#E0E7FF,stroke:#4338CA,color:#111827;
+    classDef service fill:#DBEAFE,stroke:#1D4ED8,color:#111827;
+    classDef client fill:#D1FAE5,stroke:#047857,color:#111827;
+    classDef repo fill:#FDE68A,stroke:#CA8A04,color:#111827;
+    classDef external fill:#D1FAE5,stroke:#047857,color:#111827;
+    classDef database fill:#FDE68A,stroke:#CA8A04,color:#111827;
+    
+    class Req request;
+    class Ctrl controller;
+    class Serv service;
+    class Clients client;
+    class Repos repo;
+    class ExtAPI external;
+    class DB database;
+```
 
 ## Features
 
