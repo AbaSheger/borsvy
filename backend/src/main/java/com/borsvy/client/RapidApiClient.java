@@ -25,9 +25,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import java.util.Iterator;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.Arrays;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.net.MalformedURLException;
 
 /**
  * Client for making API calls to Yahoo Finance via RapidAPI
@@ -54,9 +59,8 @@ public class RapidApiClient {
      * Gets financial news articles for a stock
      */
     public List<NewsArticle> getStockNews(String symbol, int limit) {
-        // Try direct news API first
-        List<NewsArticle> articles = getNewsViaNewsAPI(symbol, limit);
-        return articles;
+        // Use the updated news API method
+        return getNewsViaNewsAPI(symbol, limit > 0 ? limit : DEFAULT_LIMIT);
     }
     
     /**
@@ -152,192 +156,148 @@ public class RapidApiClient {
     }
     
     /**
-     * Gets news via search API - more relevant but might return fewer results
-     */
-    private List<NewsArticle> getNewsViaSearch(String symbol, int limit) {
-        final String companyName = getCompanyNameForSymbol(symbol);
-        final String searchQuery = !companyName.isEmpty() 
-            ? companyName + " " + symbol + " stock financial news" 
-            : symbol + " stock financial news";
-        
-        try (AsyncHttpClient client = new DefaultAsyncHttpClient()) {
-            String url = "https://yahoo-finance15.p.rapidapi.com/api/v1/search?search=" + searchQuery + "&lang=en";
-            log.info("Making search request to URL: {}", url);
-            
-            return client.prepare("GET", url)
-                .setHeader("x-rapidapi-key", apiKey)
-                .setHeader("x-rapidapi-host", apiHost)
-                .execute()
-                .toCompletableFuture()
-                .<List<NewsArticle>>thenApply(response -> {
-                    try {
-                        if (response.getStatusCode() != 200) {
-                            log.error("Search API error: {}", response.getResponseBody());
-                            return new ArrayList<>();
-                        }
-                        
-                        JsonNode root = objectMapper.readTree(response.getResponseBody());
-                        List<NewsArticle> articles = new ArrayList<>();
-                        
-                        // Extract news from quotes section
-                        if (root.has("quotes") && root.get("quotes").isArray()) {
-                            JsonNode quotes = root.get("quotes");
-                            log.info("Found {} search results", quotes.size());
-                            
-                            for (JsonNode quote : quotes) {
-                                if (quote.has("news") && quote.get("news").isArray()) {
-                                    for (JsonNode item : quote.get("news")) {
-                                        if (articles.size() >= limit) break;
-                                        NewsArticle article = extractArticle(item);
-                                        if (article != null) {
-                                            articles.add(article);
-                                            log.info("Added search article: {}", article.getTitle());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Also check news section if available
-                        if (articles.size() < limit && root.has("news") && root.get("news").isArray()) {
-                            for (JsonNode item : root.get("news")) {
-                                if (articles.size() >= limit) break;
-                                NewsArticle article = extractArticle(item);
-                                if (article != null && !isDuplicate(articles, article)) {
-                                    articles.add(article);
-                                    log.info("Added news section article: {}", article.getTitle());
-                                }
-                            }
-                        }
-                        
-                        return articles;
-                    } catch (Exception e) {
-                        log.error("Error processing search: {}", e.getMessage());
-                        return new ArrayList<>();
-                    }
-                })
-                .exceptionally(t -> {
-                    log.error("Exception in search: {}", t.getMessage());
-                    return new ArrayList<>();
-                })
-                .join();
-        } catch (Exception e) {
-            log.error("Error in search: {}", e.getMessage());
-            return new ArrayList<>();
-        }
-    }
-    
-    /**
-     * Gets news via direct news API - might be less relevant but returns more results
+     * Gets news via the specific symbol news API
      */
     private List<NewsArticle> getNewsViaNewsAPI(String symbol, int limit) {
         if (limit <= 0) return new ArrayList<>();
+        if (symbol == null || symbol.isEmpty()) {
+            log.warn("Cannot fetch news without a stock symbol.");
+            return new ArrayList<>();
+        }
         final String companyName = getCompanyNameForSymbol(symbol);
         
-        try (AsyncHttpClient client = new DefaultAsyncHttpClient()) {
-            // Use a more specific search query that includes both symbol and company name
-            String searchQuery = symbol;
-            if (!companyName.isEmpty()) {
-                searchQuery += " OR " + companyName;
-            }
+        try (AsyncHttpClient client = Dsl.asyncHttpClient()) { // Use Dsl for simplicity
+            String url = "https://yahoo-finance166.p.rapidapi.com/api/news/list-by-symbol";
+            log.info("Making news request to URL: {} with symbol: {}, limit: {}", url, symbol, limit);
             
-            // Use the markets/news endpoint which is more reliable
-            String url = "https://yahoo-finance15.p.rapidapi.com/api/v1/markets/news?tickers=" + searchQuery;
-            log.info("Making news request to URL: {}", url);
-            
-            return client.prepare("GET", url)
+            return client.prepareGet(url)
+                .addQueryParam("s", symbol)
+                .addQueryParam("region", "US")
+                .addQueryParam("snippetCount", String.valueOf(limit)) // Use limit for snippetCount
                 .setHeader("x-rapidapi-key", apiKey)
-                .setHeader("x-rapidapi-host", apiHost)
+                .setHeader("x-rapidapi-host", "yahoo-finance166.p.rapidapi.com") // Correct host
                 .execute()
                 .toCompletableFuture()
                 .<List<NewsArticle>>thenApply(response -> {
                     try {
                         if (response.getStatusCode() != 200) {
-                            log.error("News API error: {}", response.getResponseBody());
+                            log.error("News API error {}: {}", response.getStatusCode(), response.getResponseBody());
                             return new ArrayList<>();
                         }
                         
                         String responseBody = response.getResponseBody();
-                        log.debug("Raw API response: {}", responseBody);
+                        log.debug("Raw API response from yahoo-finance166: {}", responseBody);
                         
                         JsonNode root = objectMapper.readTree(responseBody);
                         List<NewsArticle> articles = new ArrayList<>();
                         
-                        // Try different possible response structures
+                        // Determine where the news items are located in the response
                         JsonNode newsArray = null;
-                        if (root.has("body") && root.get("body").isArray()) {
-                            newsArray = root.get("body");
-                            log.info("Found news articles in 'body' array");
+                        if (root.isArray()) {
+                            newsArray = root;
+                            log.info("Found news items in root array.");
+                        } else if (root.has("items") && root.get("items").isArray()) {
+                            newsArray = root.get("items");
+                            log.info("Found news items in 'items' array.");
+                        } else if (root.has("news") && root.get("news").isArray()) {
+                            newsArray = root.get("news");
+                            log.info("Found news items in 'news' array.");
                         } else if (root.has("data") && root.get("data").isArray()) {
                             newsArray = root.get("data");
-                            log.info("Found news articles in 'data' array");
-                        } else if (root.isArray()) {
-                            newsArray = root;
-                            log.info("Found news articles in root array");
+                            log.info("Found news items in 'data' array.");
+                        } else {
+                            // Log the structure if unfamiliar
+                            log.warn("Unexpected JSON structure from news API. Root keys: {}", 
+                                     StreamSupport.stream(Spliterators.spliteratorUnknownSize(root.fieldNames(), Spliterator.ORDERED), false)
+                                                   .collect(Collectors.joining(", ")));
                         }
                         
                         if (newsArray != null) {
-                            log.info("Found {} news articles in response", newsArray.size());
+                            log.info("Found {} potential news articles in response.", newsArray.size());
                             
+                            int addedCount = 0;
                             for (JsonNode item : newsArray) {
-                                if (articles.size() >= limit) break;
+                                if (addedCount >= limit) break;
                                 
-                                // Check if the article is relevant to the stock
-                                String title = item.has("title") ? item.get("title").asText("") : "";
-                                String summary = item.has("text") ? item.get("text").asText("") : "";
+                                // Use extractArticleV2 as it handles more fields
+                                NewsArticle article = extractArticleV2(item);
                                 
-                                // Check relevance using both title and summary
-                                if (isRelevantToStock(title, summary, symbol, companyName)) {
-                                    NewsArticle article = extractArticle(item);
-                                    if (article != null) {
-                                        articles.add(article);
-                                        log.info("Added relevant article: {}", article.getTitle());
+                                if (article != null) {
+                                    // Check relevance using the existing method
+                                    if (isRelevantToStock(article.getTitle(), article.getSummary(), symbol, companyName)) {
+                                        if (!isDuplicate(articles, article)) {
+                                            articles.add(article);
+                                            addedCount++;
+                                            log.info("Added relevant article ({}): {}", addedCount, article.getTitle());
+                                        } else {
+                                            log.debug("Skipping duplicate article: {}", article.getTitle());
+                                        }
+                                    } else {
+                                        log.debug("Skipping irrelevant article: {}", article.getTitle());
                                     }
                                 } else {
-                                    log.debug("Skipping irrelevant article: {}", title);
+                                    log.warn("Failed to extract article from item: {}", item.toString());
                                 }
                             }
+                            log.info("Finished processing. Added {} relevant articles.", addedCount);
                         } else {
-                            log.warn("No news array found in API response");
+                            log.warn("No parsable news array found in API response.");
                         }
                         
                         return articles;
                     } catch (Exception e) {
-                        log.error("Error processing news: {} - {}", e.getMessage(), e.getClass().getName());
+                        log.error("Error processing news from yahoo-finance166: {} - {}", e.getMessage(), e.getClass().getName(), e);
                         return new ArrayList<>();
                     }
                 })
                 .exceptionally(t -> {
-                    log.error("Exception in news: {}", t.getMessage());
+                    log.error("Exception fetching news from yahoo-finance166: {}", t.getMessage(), t);
                     return new ArrayList<>();
                 })
                 .join();
         } catch (Exception e) {
-            log.error("Error in news API: {}", e.getMessage());
+            log.error("Error setting up news API call to yahoo-finance166: {}", e.getMessage(), e);
             return new ArrayList<>();
         }
     }
     
     private boolean isRelevantToStock(String title, String summary, String symbol, String companyName) {
-        if (title.isEmpty()) return false;
+        if (title == null || title.isEmpty()) {
+            log.debug("Relevance check: Skipping article with empty title.");
+            return false;
+        }
         
-        String textToCheck = (title + " " + summary).toLowerCase();
+        String textToCheck = (title + " " + (summary != null ? summary : "")).toLowerCase();
         String symbolLower = symbol.toLowerCase();
-        String companyLower = companyName.toLowerCase();
+        String companyLower = (companyName != null && !companyName.isEmpty()) ? companyName.toLowerCase() : "";
         
-        // Check for direct mentions of symbol or company name
-        if (textToCheck.contains(symbolLower) || textToCheck.contains(companyLower)) {
+        // Primary Check: Direct mention of symbol or company name
+        boolean containsSymbol = textToCheck.contains(symbolLower);
+        boolean containsCompany = !companyLower.isEmpty() && textToCheck.contains(companyLower);
+        boolean isDirectlyRelevant = containsSymbol || containsCompany;
+        
+        log.debug("Relevance Check:");
+        log.debug("  Symbol: '{}', Company: '{}'", symbol, companyName);
+        log.debug("  Title: '{}'", title);
+        log.debug("  Summary: '{}'", summary != null ? summary : "N/A");
+        log.debug("  Text Checked (lower): '{}'", textToCheck);
+        log.debug("  Contains Symbol ('{}'): {}", symbolLower, containsSymbol);
+        log.debug("  Contains Company ('{}'): {}", companyLower, containsCompany);
+        log.debug("  Directly Relevant: {}", isDirectlyRelevant);
+
+        if (isDirectlyRelevant) {
+            log.debug("  Result: Relevant (Direct Match)");
             return true;
         }
         
-        // Check for common financial terms that indicate stock relevance
+        // Secondary Check: Check for common financial terms if no direct match
         String[] financialTerms = {
             "stock", "shares", "market", "trading", "price", "investor", 
             "earnings", "revenue", "profit", "growth", "performance",
-            "dividend", "analyst", "target price", "valuation", "market cap"
+            "dividend", "analyst", "target price", "valuation", "market cap",
+            symbolLower // Also include the symbol itself in terms check
         };
         
-        // Count how many financial terms are present
         int financialTermCount = 0;
         for (String term : financialTerms) {
             if (textToCheck.contains(term)) {
@@ -345,8 +305,12 @@ public class RapidApiClient {
             }
         }
         
-        // Consider it relevant if it has at least 2 financial terms
-        return financialTermCount >= 2;
+        boolean isIndirectlyRelevant = financialTermCount >= 2; // Require at least 2 terms
+        log.debug("  Financial Terms Found: {}", financialTermCount);
+        log.debug("  Indirectly Relevant (>=2 terms): {}", isIndirectlyRelevant);
+        log.debug("  Result: {}", isIndirectlyRelevant ? "Relevant (Indirect Match)" : "Irrelevant");
+
+        return isIndirectlyRelevant;
     }
     
     /**
@@ -354,79 +318,70 @@ public class RapidApiClient {
      */
     private NewsArticle extractArticle(JsonNode item) {
         try {
-            log.debug("Processing news item: {}", item.toString());
+            String title = item.get("title").asText();
+            String url = item.get("link").asText();
+            String source = item.get("source").asText();
+            String publishedDate = formatDate(item.get("pubDate").asText());
+            String summary = item.has("description") ? item.get("description").asText() : "";
             
-            // Extract required fields
-            String title = item.has("title") ? item.get("title").asText("") : "";
-            if (title.isEmpty()) {
-                log.debug("Skipping article with empty title");
-                return null;
-            }
+            // Use a default thumbnail if none is available
+            String thumbnail = getDefaultThumbnailForSource(source);
             
-            String link = item.has("link") ? item.get("link").asText("") : "";
-            if (link.isEmpty()) {
-                log.debug("Skipping article with empty link");
-                return null;
-            }
-            
-            // Create article
-            NewsArticle article = new NewsArticle();
-            article.setTitle(title);
-            article.setUrl(link);
-            
-            // Publisher/source
-            String source = item.has("source") ? item.get("source").asText("") : "Yahoo Finance";
-            article.setSource(source);
-            
-            // Date
-            String pubDate = item.has("pubDate") ? item.get("pubDate").asText("") : "";
-            article.setPublishedDate(formatDate(pubDate));
-            
-            // Summary - use title if no summary available
-            String summary = item.has("text") ? item.get("text").asText("") : title;
-            article.setSummary(summary);
-            
-            // Enhanced thumbnail handling
-            String thumbnail = null;
-            
-            // Try different possible thumbnail fields
-            if (item.has("img") && !item.get("img").asText("").isEmpty()) {
-                thumbnail = item.get("img").asText("");
-            } else if (item.has("image_url") && !item.get("image_url").asText("").isEmpty()) {
-                thumbnail = item.get("image_url").asText("");
-            } else if (item.has("thumbnail") && !item.get("thumbnail").asText("").isEmpty()) {
-                thumbnail = item.get("thumbnail").asText("");
-            } else if (item.has("image") && !item.get("image").asText("").isEmpty()) {
-                thumbnail = item.get("image").asText("");
-            }
-            
-            // If no thumbnail found, try to extract from the article URL
-            if (thumbnail == null || thumbnail.isEmpty()) {
-                try {
-                    thumbnail = extractThumbnailFromUrl(link);
-                } catch (Exception e) {
-                    log.debug("Failed to extract thumbnail from URL: {}", e.getMessage());
-                }
-            }
-            
-            // Set default thumbnail based on source if no thumbnail found
-            if (thumbnail == null || thumbnail.isEmpty()) {
-                thumbnail = getDefaultThumbnailForSource(source);
-                log.debug("Using default thumbnail for source: {}", source);
-            }
-            
-            article.setThumbnail(thumbnail);
-            log.debug("Created article: {} with thumbnail: {}", title, thumbnail);
-            
-            return article;
+            return new NewsArticle(title, summary, url, thumbnail);
         } catch (Exception e) {
             log.error("Error extracting article: {}", e.getMessage());
             return null;
         }
     }
     
+    private String extractImageFromText(String text) {
+        if (text == null || text.isEmpty()) {
+            return null;
+        }
+        
+        // Look for img tags
+        Pattern imgPattern = Pattern.compile("<img[^>]+src=\"([^\">]+)\"");
+        Matcher imgMatcher = imgPattern.matcher(text);
+        if (imgMatcher.find()) {
+            String imgUrl = imgMatcher.group(1);
+            if (isValidImageUrl(imgUrl)) {
+                return imgUrl;
+            }
+        }
+        
+        // Look for image URLs in the text
+        Pattern urlPattern = Pattern.compile("https?://[^\\s<>]+?\\.(jpg|jpeg|png|gif)");
+        Matcher urlMatcher = urlPattern.matcher(text);
+        if (urlMatcher.find()) {
+            String imgUrl = urlMatcher.group();
+            if (isValidImageUrl(imgUrl)) {
+                return imgUrl;
+            }
+        }
+        
+        return null;
+    }
+
+    private boolean isValidImageUrl(String url) {
+        if (url == null || url.isEmpty()) {
+            return false;
+        }
+        
+        // Check if URL is valid
+        try {
+            new URL(url);
+        } catch (MalformedURLException e) {
+            return false;
+        }
+        
+        // Check if URL points to an image
+        return url.matches(".*\\.(jpg|jpeg|png|gif)(\\?.*)?$");
+    }
+    
     private String extractThumbnailFromUrl(String url) {
         try {
+            log.info("Attempting to extract thumbnail from URL: {}", url);
+            
             // Try to get the article's main image using a simple HTML parser
             Document doc = Jsoup.connect(url)
                 .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
@@ -440,7 +395,7 @@ public class RapidApiClient {
             Element metaImage = doc.select("meta[property=og:image]").first();
             if (metaImage != null) {
                 thumbnail = metaImage.attr("content");
-                log.debug("Found Open Graph image: {}", thumbnail);
+                log.info("Found Open Graph image: {}", thumbnail);
             }
             
             // 2. Try Twitter card image
@@ -448,7 +403,7 @@ public class RapidApiClient {
                 metaImage = doc.select("meta[name=twitter:image]").first();
                 if (metaImage != null) {
                     thumbnail = metaImage.attr("content");
-                    log.debug("Found Twitter card image: {}", thumbnail);
+                    log.info("Found Twitter card image: {}", thumbnail);
                 }
             }
             
@@ -457,7 +412,7 @@ public class RapidApiClient {
                 metaImage = doc.select("meta[property=article:image]").first();
                 if (metaImage != null) {
                     thumbnail = metaImage.attr("content");
-                    log.debug("Found article:image: {}", thumbnail);
+                    log.info("Found article:image: {}", thumbnail);
                 }
             }
             
@@ -484,7 +439,7 @@ public class RapidApiClient {
                     if (thumbnail.startsWith("/")) {
                         thumbnail = new URL(new URL(url), thumbnail).toString();
                     }
-                    log.debug("Found main content image: {}", thumbnail);
+                    log.info("Found main content image: {}", thumbnail);
                 }
             }
             
@@ -497,7 +452,7 @@ public class RapidApiClient {
                     if (thumbnail.startsWith("/")) {
                         thumbnail = new URL(new URL(url), thumbnail).toString();
                     }
-                    log.debug("Found article content image: {}", thumbnail);
+                    log.info("Found article content image: {}", thumbnail);
                 }
             }
             
@@ -514,18 +469,22 @@ public class RapidApiClient {
                     connection.setRequestMethod("HEAD");
                     int responseCode = connection.getResponseCode();
                     if (responseCode != 200) {
-                        log.debug("Thumbnail URL not accessible: {}", thumbnail);
+                        log.warn("Thumbnail URL not accessible (HTTP {}): {}", responseCode, thumbnail);
                         thumbnail = null;
+                    } else {
+                        log.info("Successfully validated thumbnail URL: {}", thumbnail);
                     }
                 } catch (Exception e) {
-                    log.debug("Error checking thumbnail URL: {}", e.getMessage());
+                    log.warn("Error checking thumbnail URL: {} - {}", thumbnail, e.getMessage());
                     thumbnail = null;
                 }
+            } else {
+                log.warn("No thumbnail found for URL: {}", url);
             }
             
             return thumbnail;
         } catch (Exception e) {
-            log.debug("Failed to extract thumbnail from URL {}: {}", url, e.getMessage());
+            log.error("Failed to extract thumbnail from URL {}: {}", url, e.getMessage());
             return null;
         }
     }
@@ -614,56 +573,32 @@ public class RapidApiClient {
      * Get a default thumbnail based on the news source
      */
     private String getDefaultThumbnailForSource(String source) {
-        // Map of source-specific thumbnails with multiple options per source
-        Map<String, String[]> sourceThumbnails = new HashMap<>();
-        
-        // Reuters thumbnails
-        sourceThumbnails.put("Reuters", new String[] {
-            "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1468254095679-bbcba94a7066?w=800&auto=format&fit=crop"
-        });
-        
-        // Bloomberg thumbnails
-        sourceThumbnails.put("Bloomberg", new String[] {
-            "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop"
-        });
-        
-        // Barrons thumbnails
-        sourceThumbnails.put("Barrons", new String[] {
-            "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1468254095679-bbcba94a7066?w=800&auto=format&fit=crop"
-        });
-        
-        // CNBC thumbnails
-        sourceThumbnails.put("CNBC", new String[] {
-            "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop"
-        });
-        
-        // Insider Monkey thumbnails
-        sourceThumbnails.put("Insider Monkey", new String[] {
-            "https://images.unsplash.com/photo-1468254095679-bbcba94a7066?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop"
-        });
-        
-        // Yahoo Finance thumbnails
-        sourceThumbnails.put("Yahoo Finance", new String[] {
-            "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop"
-        });
-        
-        // Try to find a source-specific thumbnail
-        for (Map.Entry<String, String[]> entry : sourceThumbnails.entrySet()) {
-            if (source.toLowerCase().contains(entry.getKey().toLowerCase())) {
-                String[] thumbnails = entry.getValue();
-                return thumbnails[new Random().nextInt(thumbnails.length)];
-            }
+        if (source == null) {
+            return getDefaultFinancialThumbnail();
         }
         
-        // If no source-specific thumbnail found, use a random default
-        return getDefaultFinancialThumbnail();
+        // Map common news sources to their default thumbnails
+        Map<String, String> sourceThumbnails = new HashMap<>();
+        sourceThumbnails.put("Yahoo Finance", "https://s.yimg.com/ny/api/res/1.2/2Qq8o3Ld_2PqL2K5L1XzGA--/YXBwaWQ9aGlnaGxhbmRlcjt3PTk2MDtoPTU0MDtjZj13ZWJw/https://s.yimg.com/uu/api/res/1.2/QxV2bGVfSVFnb2x3X1F3Z2t3L2h0dHBzOi8vd3d3LnlhaG9vLmNvbS9maW5hbmNlL2ltYWdlcy9kZWZhdWx0L2ZpbmFuY2lhbC1uZXdzLmpwZw--");
+        sourceThumbnails.put("Reuters", "https://www.reuters.com/pf/resources/images/reuters/reuters-default.png");
+        sourceThumbnails.put("Bloomberg", "https://assets.bwbx.io/s3/javelin/public/javelin/images/social-default-a4f15fa7ee.jpg");
+        sourceThumbnails.put("CNBC", "https://www.cnbc.com/pf/resources/images/CNBC_logo_reuters.png");
+        sourceThumbnails.put("MarketWatch", "https://s.marketwatch.com/public/resources/images/MW-HP535_market_ZH_20190123153019.jpg");
+        sourceThumbnails.put("Business Insider", "https://static.businessinsider.com/image/5d9d8b7c6f24eb1a0a2b3b5a-1200.jpg");
+        sourceThumbnails.put("Investor's Business Daily", "https://www.investors.com/wp-content/uploads/2019/01/IBD-logo.png");
+        sourceThumbnails.put("The Wall Street Journal", "https://s.wsj.net/img/WSJ_Logo_black_social.png");
+        sourceThumbnails.put("Barrons.com", "https://www.barrons.com/assets/img/barrons-logo.png");
+        sourceThumbnails.put("Motley Fool", "https://g.foolcdn.com/art/companylogos/square/tmf.png");
+        sourceThumbnails.put("Fortune", "https://fortune.com/favicon.ico");
+        sourceThumbnails.put("The Real Deal", "https://therealdeal.com/wp-content/uploads/2019/05/trd-logo.png");
+        sourceThumbnails.put("Insider Monkey", "https://www.insidermonkey.com/blog/wp-content/uploads/2019/01/insider-monkey-logo.png");
+        sourceThumbnails.put("Benzinga", "https://cdn.benzinga.com/files/images/story/2012/benzinga-logo.png");
+        sourceThumbnails.put("Investopedia", "https://www.investopedia.com/thmb/0YHt1qQvQw7Ckf6ENJh0QjXF8b4=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/InvestopediaLogo-9c5b0a7f0b4b4798b0bfde9d5b0b8b3a.png");
+        sourceThumbnails.put("etf.com", "https://www.etf.com/sites/default/files/etf-com-logo.png");
+        sourceThumbnails.put("TheStreet", "https://www.thestreet.com/.image/t_share/MTc0NDU4NDg5ODQ5NDQ5NDQ5/thestreet-logo.png");
+        sourceThumbnails.put("CIO Dive", "https://www.ciodive.com/img/ciodive-logo.png");
+        
+        return sourceThumbnails.getOrDefault(source, getDefaultFinancialThumbnail());
     }
     
     /**
@@ -783,14 +718,7 @@ public class RapidApiClient {
      * Get default financial thumbnail
      */
     private String getDefaultFinancialThumbnail() {
-        String[] thumbnails = {
-            "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1468254095679-bbcba94a7066?w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=800&auto=format&fit=crop"
-        };
-        
-        return thumbnails[new Random().nextInt(thumbnails.length)];
+        return "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop";
     }
     
     /**
