@@ -17,8 +17,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @EnableRetry
 public class BorsVyApplication {
     public static void main(String[] args) {
-        // Load environment variables from .env file
-        Dotenv dotenv = Dotenv.configure().load();
+        // Load environment variables from .env file if it exists, otherwise ignore.
+        // Environment variables set in Railway will still be loaded automatically by Spring Boot.
+        Dotenv dotenv = Dotenv.configure()
+                             .ignoreIfMissing()
+                             .load();
+        // Setting system properties from dotenv might be redundant in production
+        // as Spring Boot picks up platform env vars, but keep for local .env consistency.
         dotenv.entries().forEach(entry -> System.setProperty(entry.getKey(), entry.getValue()));
         
         SpringApplication.run(BorsVyApplication.class, args);
