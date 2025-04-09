@@ -1,0 +1,9 @@
+[build]
+builder = "nixpacks"
+providers = ["jdk_17"]
+buildCommand = "cd backend && chmod +x mvnw && ./mvnw clean package -DskipTests"
+
+[deploy]
+startCommand = "cd backend && java -jar target/*.jar"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3 
