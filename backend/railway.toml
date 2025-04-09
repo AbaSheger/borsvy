@@ -1,0 +1,12 @@
+[build]
+builder = "maven"
+buildCommand = "mvn clean package -DskipTests"
+
+[deploy]
+startCommand = "java -jar target/*.jar"
+healthcheckPath = "/actuator/health"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+
+[env]
+JAVA_VERSION = "17" 

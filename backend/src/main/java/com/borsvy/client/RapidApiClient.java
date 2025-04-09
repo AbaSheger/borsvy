@@ -26,6 +26,8 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import java.util.Iterator;
 import java.util.Arrays;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 /**
  * Client for making API calls to Yahoo Finance via RapidAPI
@@ -239,6 +241,7 @@ public class RapidApiClient {
                 searchQuery += " OR " + companyName;
             }
             
+            // Use the markets/news endpoint which is more reliable
             String url = "https://yahoo-finance15.p.rapidapi.com/api/v1/markets/news?tickers=" + searchQuery;
             log.info("Making news request to URL: {}", url);
             
@@ -281,35 +284,21 @@ public class RapidApiClient {
                                 
                                 // Check if the article is relevant to the stock
                                 String title = item.has("title") ? item.get("title").asText("") : "";
+                                String summary = item.has("text") ? item.get("text").asText("") : "";
                                 
-                                // Only require title to be non-empty
-                                if (title.isEmpty()) {
-                                    log.debug("Skipping article with empty title");
-                                    continue;
-                                }
-                                
-                                // Check relevance
-                                if (isHighlyRelevant(title, symbol, companyName)) {
+                                // Check relevance using both title and summary
+                                if (isRelevantToStock(title, summary, symbol, companyName)) {
                                     NewsArticle article = extractArticle(item);
                                     if (article != null) {
                                         articles.add(article);
-                                        log.info("Added relevant article: {} with thumbnail: {}", 
-                                            article.getTitle(), article.getThumbnail());
+                                        log.info("Added relevant article: {}", article.getTitle());
                                     }
                                 } else {
                                     log.debug("Skipping irrelevant article: {}", title);
                                 }
                             }
                         } else {
-                            log.warn("No news array found in API response. Response structure: {}", 
-                                root.toString().substring(0, Math.min(500, root.toString().length())));
-                        }
-                        
-                        // If we didn't get enough articles, try the search API as fallback
-                        if (articles.size() < limit) {
-                            log.info("Not enough articles from news API, trying search API as fallback");
-                            List<NewsArticle> searchArticles = getNewsViaSearch(symbol, limit - articles.size());
-                            articles.addAll(searchArticles);
+                            log.warn("No news array found in API response");
                         }
                         
                         return articles;
@@ -327,6 +316,37 @@ public class RapidApiClient {
             log.error("Error in news API: {}", e.getMessage());
             return new ArrayList<>();
         }
+    }
+    
+    private boolean isRelevantToStock(String title, String summary, String symbol, String companyName) {
+        if (title.isEmpty()) return false;
+        
+        String textToCheck = (title + " " + summary).toLowerCase();
+        String symbolLower = symbol.toLowerCase();
+        String companyLower = companyName.toLowerCase();
+        
+        // Check for direct mentions of symbol or company name
+        if (textToCheck.contains(symbolLower) || textToCheck.contains(companyLower)) {
+            return true;
+        }
+        
+        // Check for common financial terms that indicate stock relevance
+        String[] financialTerms = {
+            "stock", "shares", "market", "trading", "price", "investor", 
+            "earnings", "revenue", "profit", "growth", "performance",
+            "dividend", "analyst", "target price", "valuation", "market cap"
+        };
+        
+        // Count how many financial terms are present
+        int financialTermCount = 0;
+        for (String term : financialTerms) {
+            if (textToCheck.contains(term)) {
+                financialTermCount++;
+            }
+        }
+        
+        // Consider it relevant if it has at least 2 financial terms
+        return financialTermCount >= 2;
     }
     
     /**
@@ -408,21 +428,106 @@ public class RapidApiClient {
     private String extractThumbnailFromUrl(String url) {
         try {
             // Try to get the article's main image using a simple HTML parser
-            Document doc = Jsoup.connect(url).get();
+            Document doc = Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                .timeout(10000)
+                .get();
+            
+            // Try different meta tags for images
+            String thumbnail = null;
+            
+            // 1. Try Open Graph image
             Element metaImage = doc.select("meta[property=og:image]").first();
             if (metaImage != null) {
-                return metaImage.attr("content");
+                thumbnail = metaImage.attr("content");
+                log.debug("Found Open Graph image: {}", thumbnail);
             }
             
-            // Try to find the first large image in the article
-            Element img = doc.select("img[src~=(?i)\\.(png|jpe?g|gif)]").first();
-            if (img != null) {
-                return img.attr("src");
+            // 2. Try Twitter card image
+            if (thumbnail == null) {
+                metaImage = doc.select("meta[name=twitter:image]").first();
+                if (metaImage != null) {
+                    thumbnail = metaImage.attr("content");
+                    log.debug("Found Twitter card image: {}", thumbnail);
+                }
             }
+            
+            // 3. Try article:image meta tag
+            if (thumbnail == null) {
+                metaImage = doc.select("meta[property=article:image]").first();
+                if (metaImage != null) {
+                    thumbnail = metaImage.attr("content");
+                    log.debug("Found article:image: {}", thumbnail);
+                }
+            }
+            
+            // 4. Try to find the first large image in the article
+            if (thumbnail == null) {
+                // Look for images with specific classes or IDs that typically indicate main content
+                Element mainImage = doc.select("img.article-image, img.article-img, img.main-image, img.featured-image, img.hero-image").first();
+                if (mainImage == null) {
+                    // If no specific class found, look for the first large image
+                    mainImage = doc.select("img[src~=(?i)\\.(png|jpe?g|gif)]").stream()
+                        .filter(img -> {
+                            String width = img.attr("width");
+                            String height = img.attr("height");
+                            return (width != null && Integer.parseInt(width) >= 300) || 
+                                   (height != null && Integer.parseInt(height) >= 200);
+                        })
+                        .findFirst()
+                        .orElse(null);
+                }
+                
+                if (mainImage != null) {
+                    thumbnail = mainImage.attr("src");
+                    // Handle relative URLs
+                    if (thumbnail.startsWith("/")) {
+                        thumbnail = new URL(new URL(url), thumbnail).toString();
+                    }
+                    log.debug("Found main content image: {}", thumbnail);
+                }
+            }
+            
+            // 5. Try to find any image in the article content
+            if (thumbnail == null) {
+                Element articleImage = doc.select("article img, .article-content img, .post-content img").first();
+                if (articleImage != null) {
+                    thumbnail = articleImage.attr("src");
+                    // Handle relative URLs
+                    if (thumbnail.startsWith("/")) {
+                        thumbnail = new URL(new URL(url), thumbnail).toString();
+                    }
+                    log.debug("Found article content image: {}", thumbnail);
+                }
+            }
+            
+            // Validate the thumbnail URL
+            if (thumbnail != null) {
+                // Check if the URL is absolute
+                if (!thumbnail.startsWith("http")) {
+                    thumbnail = new URL(new URL(url), thumbnail).toString();
+                }
+                
+                // Check if the image URL is accessible
+                try {
+                    HttpURLConnection connection = (HttpURLConnection) new URL(thumbnail).openConnection();
+                    connection.setRequestMethod("HEAD");
+                    int responseCode = connection.getResponseCode();
+                    if (responseCode != 200) {
+                        log.debug("Thumbnail URL not accessible: {}", thumbnail);
+                        thumbnail = null;
+                    }
+                } catch (Exception e) {
+                    log.debug("Error checking thumbnail URL: {}", e.getMessage());
+                    thumbnail = null;
+                }
+            }
+            
+            return thumbnail;
         } catch (Exception e) {
             log.debug("Failed to extract thumbnail from URL {}: {}", url, e.getMessage());
+            return null;
         }
-        return null;
     }
     
     /**

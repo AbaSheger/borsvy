@@ -32,7 +32,7 @@ public class LLMAnalysisService {
     @Value("${huggingface.api.key}")
     private String apiKey;
     
-    private static final String API_URL = "https://api-inference.huggingface.co/models/finiteautomata/bertweet-base-sentiment-analysis";
+    private static final String API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2";
     private static final int MAX_REQUESTS_PER_MINUTE = 30;
     private int requestCount = 0;
     private long lastResetTime = System.currentTimeMillis();
@@ -84,17 +84,7 @@ public class LLMAnalysisService {
             log.debug("Received response from Hugging Face API: {}", response.getBody());
             
             // Parse response
-            List<List<Map<String, Object>>> results = objectMapper.readValue(
-                response.getBody(),
-                objectMapper.getTypeFactory().constructCollectionType(List.class,
-                    objectMapper.getTypeFactory().constructCollectionType(List.class,
-                        objectMapper.getTypeFactory().constructMapType(Map.class, String.class, Object.class)))
-            );
-            
-            log.debug("Parsed results: {}", results);
-            
-            // Extract sentiment and confidence
-            Map<String, Object> sentimentResult = extractSentiment(results);
+            Map<String, Object> sentimentResult = extractSentiment(response.getBody());
             String sentiment = (String) sentimentResult.get("sentiment");
             Double confidence = (Double) sentimentResult.get("confidence");
             
@@ -135,7 +125,8 @@ public class LLMAnalysisService {
     
     private String generatePrompt(Stock stock) {
         StringBuilder prompt = new StringBuilder();
-        prompt.append("Analyze the sentiment of the following stock market data:\n");
+        prompt.append("Analyze the sentiment of the following stock market data and return ONLY the sentiment (POSITIVE, NEGATIVE, or NEUTRAL) and a confidence score between 0 and 1. Format your response exactly like this: SENTIMENT:POSITIVE CONFIDENCE:0.85\n\n");
+        prompt.append("Stock Data:\n");
         prompt.append("Symbol: ").append(stock.getSymbol()).append("\n");
         prompt.append("Price: $").append(stock.getPrice()).append("\n");
         prompt.append("Change: ").append(stock.getChangePercent()).append("%\n");
@@ -150,19 +141,40 @@ public class LLMAnalysisService {
         return prompt.toString();
     }
     
-    private Map<String, Object> extractSentiment(List<List<Map<String, Object>>> results) {
-        if (results == null || results.isEmpty() || results.get(0) == null || results.get(0).isEmpty()) {
-            throw new RuntimeException("No sentiment results found in API response");
-        }
-        
-        List<Map<String, Object>> sentimentResults = results.get(0);
-        Map<String, Object> bestResult = sentimentResults.stream()
-            .max(Comparator.comparingDouble(r -> (Double) r.get("score")))
-            .orElseThrow(() -> new RuntimeException("Could not find best sentiment result"));
-        
+    private Map<String, Object> extractSentiment(String response) {
         Map<String, Object> result = new HashMap<>();
-        result.put("sentiment", bestResult.get("label"));
-        result.put("confidence", bestResult.get("score"));
+        
+        try {
+            // Extract sentiment and confidence from the response
+            String[] parts = response.split("\\s+");
+            String sentiment = null;
+            Double confidence = 0.0;
+            
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i].startsWith("SENTIMENT:")) {
+                    sentiment = parts[i].substring("SENTIMENT:".length()).toLowerCase();
+                } else if (parts[i].startsWith("CONFIDENCE:")) {
+                    try {
+                        confidence = Double.parseDouble(parts[i].substring("CONFIDENCE:".length()));
+                    } catch (NumberFormatException e) {
+                        confidence = 0.5; // Default confidence if parsing fails
+                    }
+                }
+            }
+            
+            if (sentiment == null) {
+                sentiment = "neutral";
+                confidence = 0.5;
+            }
+            
+            result.put("sentiment", sentiment);
+            result.put("confidence", confidence);
+            
+        } catch (Exception e) {
+            log.error("Error parsing Mistral-7B response: {}", e.getMessage());
+            result.put("sentiment", "neutral");
+            result.put("confidence", 0.5);
+        }
         
         return result;
     }
