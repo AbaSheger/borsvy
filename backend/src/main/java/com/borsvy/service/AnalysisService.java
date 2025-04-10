@@ -24,6 +24,7 @@ import java.util.stream.Collectors;
 import com.borsvy.client.PolygonClient;
 import com.borsvy.model.StockPrice;
 import com.borsvy.model.NewsArticle;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -53,22 +54,20 @@ public class AnalysisService {
         try {
             log.info("Starting complete analysis for symbol: {}", symbol);
             
+            // Re-enable cache check
+            Map<String, Object> cachedAnalysis = analysisCache.get(symbol);
+            LocalDateTime lastUpdate = lastUpdateTimes.get(symbol);
+            if (cachedAnalysis != null && lastUpdate != null && 
+                LocalDateTime.now().minusMinutes(CACHE_DURATION_MINUTES).isBefore(lastUpdate)) {
+                log.info("Returning cached analysis for symbol: {}", symbol);
+                return cachedAnalysis;
+            }
+            
             // Validate symbol
             if (symbol == null || symbol.trim().isEmpty() || symbol.equals("undefined")) {
                 log.error("Invalid symbol provided: {}", symbol);
                 analysis.put("error", "Invalid stock symbol");
                 return analysis;
-            }
-            
-            // Check cache first
-            Map<String, Object> cachedAnalysis = analysisCache.get(symbol);
-            LocalDateTime lastUpdate = lastUpdateTimes.get(symbol);
-            
-            if (cachedAnalysis != null && lastUpdate != null) {
-                if (LocalDateTime.now().minusMinutes(CACHE_DURATION_MINUTES).isBefore(lastUpdate)) {
-                    log.info("Returning cached analysis for symbol: {}", symbol);
-                    return cachedAnalysis;
-                }
             }
             
             // Get stock data

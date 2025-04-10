@@ -12,6 +12,7 @@ public class NewsArticle {
     private String thumbnail;
     private String source;
     private String summary;
+    private String sentiment;
 
     public NewsArticle() {
     }
@@ -23,6 +24,7 @@ public class NewsArticle {
         this.thumbnail = thumbnail;
         this.source = "Yahoo Finance";
         this.publishedDate = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
+        this.sentiment = "neutral";
     }
 
     // Getters and setters
@@ -72,5 +74,13 @@ public class NewsArticle {
 
     public void setPublishedDate(String publishedDate) {
         this.publishedDate = publishedDate;
+    }
+
+    public String getSentiment() {
+        return sentiment;
+    }
+
+    public void setSentiment(String sentiment) {
+        this.sentiment = sentiment;
     }
 } 

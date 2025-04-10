@@ -58,6 +58,10 @@ public class RapidApiClient {
     /**
      * Gets financial news articles for a stock
      */
+    public List<NewsArticle> getStockNews(String symbol) {
+        return getStockNews(symbol, 10);
+    }
+    
     public List<NewsArticle> getStockNews(String symbol, int limit) {
         // Use the updated news API method
         return getNewsViaNewsAPI(symbol, limit > 0 ? limit : DEFAULT_LIMIT);
@@ -68,18 +72,24 @@ public class RapidApiClient {
      */
     public Map<String, Object> getNewsSentiment(String symbol) {
         try (AsyncHttpClient client = new DefaultAsyncHttpClient()) {
-            String url = "https://yahoo-finance15.p.rapidapi.com/api/v1/markets/news?tickers=" + symbol;
-            log.info("Making sentiment request to URL: {}", url);
+            String url = "https://yahoo-finance166.p.rapidapi.com/api/news/list-by-symbol";
+            log.info("Making sentiment request to URL: {} with symbol: {}", url, symbol);
+            log.info("Using API Key: {} and Host: {}", apiKey.substring(0, 5) + "...", apiHost);
             
             return client.prepare("GET", url)
+                .addQueryParam("s", symbol)
+                .addQueryParam("region", "US")
                 .setHeader("x-rapidapi-key", apiKey)
-                .setHeader("x-rapidapi-host", apiHost)
+                .setHeader("x-rapidapi-host", "yahoo-finance166.p.rapidapi.com")
                 .execute()
                 .toCompletableFuture()
                 .thenApply(response -> {
                     try {
+                        log.info("Received response with status code: {}", response.getStatusCode());
                         if (response.getStatusCode() != 200) {
-                            return createErrorResponse("No news sentiment data available");
+                            log.error("API returned non-200 status code: {}", response.getStatusCode());
+                            log.error("Response body: {}", response.getResponseBody());
+                            return createErrorResponse("API returned status code: " + response.getStatusCode());
                         }
                         
                         // Log response for debugging
@@ -87,19 +97,20 @@ public class RapidApiClient {
                         log.debug("Raw sentiment API response: {}", responseBody);
                         
                         JsonNode root = objectMapper.readTree(responseBody);
+                        log.info("Parsed JSON response. Root keys: {}", 
+                            StreamSupport.stream(Spliterators.spliteratorUnknownSize(root.fieldNames(), Spliterator.ORDERED), false)
+                                .collect(Collectors.joining(", ")));
                         
-                        // Determine where the news items are located in the response (same logic as news fetching)
+                        // Determine where the news items are located in the response
                         JsonNode newsArray = null;
                         
                         if (root.has("body") && root.get("body").isArray()) {
-                            // Old structure
                             newsArray = root.get("body");
                             log.info("Found sentiment items in 'body' array");
                         } else if (root.isArray()) {
                             newsArray = root;
                             log.info("Found sentiment items in root array");
                         } else if (root.has("data") && root.get("data").isObject()) {
-                            // New structure handling
                             if (root.get("data").has("main") && root.get("data").get("main").has("stream")) {
                                 newsArray = root.get("data").get("main").get("stream");
                                 log.info("Found sentiment items in 'data.main.stream' array");
@@ -119,6 +130,7 @@ public class RapidApiClient {
                                 .collect(Collectors.joining(", ")));
                             return createErrorResponse("No news data available for sentiment analysis");
                         }
+                        
                         int positiveCount = 0;
                         int negativeCount = 0;
                         int neutralCount = 0;
@@ -128,6 +140,11 @@ public class RapidApiClient {
                             String title = article.has("title") ? article.get("title").asText("") : "";
                             String summary = article.has("text") ? article.get("text").asText("") : "";
                             
+                            // Log the article for debugging
+                            log.info("Analyzing article: Title='{}', Summary='{}'", 
+                                title.length() > 50 ? title.substring(0, 50) + "..." : title,
+                                summary.length() > 50 ? summary.substring(0, 50) + "..." : summary);
+                            
                             // Analyze both title and summary
                             boolean isPositive = containsPositiveKeywords(title + " " + summary);
                             boolean isNegative = containsNegativeKeywords(title + " " + summary);
@@ -135,6 +152,11 @@ public class RapidApiClient {
                             Map<String, Object> analyzedArticle = new HashMap<>();
                             analyzedArticle.put("title", title);
                             analyzedArticle.put("sentiment", isPositive ? "positive" : isNegative ? "negative" : "neutral");
+                            
+                            // Log the sentiment finding
+                            log.info("Article sentiment: {} (positive={}, negative={})", 
+                                isPositive ? "positive" : isNegative ? "negative" : "neutral",
+                                isPositive, isNegative);
                             
                             if (isPositive) {
                                 positiveCount++;
@@ -150,13 +172,13 @@ public class RapidApiClient {
                         int total = positiveCount + negativeCount + neutralCount;
                         if (total == 0) return createErrorResponse("No sentiment data available");
                         
-                        // Calculate sentiment score
+                        // Calculate sentiment score with adjusted thresholds
                         double score = (double)(positiveCount - negativeCount) / total;
                         String overallSentiment;
-                        if (score > 0.3) overallSentiment = "bullish";
-                        else if (score > 0.1) overallSentiment = "slightly bullish";
-                        else if (score < -0.3) overallSentiment = "bearish";
-                        else if (score < -0.1) overallSentiment = "slightly bearish";
+                        if (score > 0.2) overallSentiment = "bullish";
+                        else if (score > 0.05) overallSentiment = "slightly bullish";
+                        else if (score < -0.2) overallSentiment = "bearish";
+                        else if (score < -0.05) overallSentiment = "slightly bearish";
                         else overallSentiment = "neutral";
                         
                         // Create detailed response
@@ -168,6 +190,9 @@ public class RapidApiClient {
                         result.put("totalArticles", total);
                         result.put("score", score);
                         result.put("analyzedArticles", analyzedArticles);
+                        
+                        log.info("Sentiment analysis results - Positive: {}, Negative: {}, Neutral: {}, Overall: {}", 
+                            positiveCount, negativeCount, neutralCount, overallSentiment);
                         
                         return result;
                     } catch (Exception e) {
@@ -190,128 +215,74 @@ public class RapidApiClient {
      * Gets news via the specific symbol news API
      */
     private List<NewsArticle> getNewsViaNewsAPI(String symbol, int limit) {
-        if (limit <= 0) return new ArrayList<>();
-        if (symbol == null || symbol.isEmpty()) {
-            log.warn("Cannot fetch news without a stock symbol.");
-            return new ArrayList<>();
-        }
-        final String companyName = getCompanyNameForSymbol(symbol);
+        log.info("Getting stock news via News API for symbol: {} with limit: {}", symbol, limit);
+        List<NewsArticle> articles = new ArrayList<>();
         
-        try (AsyncHttpClient client = Dsl.asyncHttpClient()) { // Use Dsl for simplicity
-            String url = "https://yahoo-finance166.p.rapidapi.com/api/news/list-by-symbol";
-            log.info("Making news request to URL: {} with symbol: {}, limit: {}", url, symbol, limit);
+        try (AsyncHttpClient client = new DefaultAsyncHttpClient()) {
+            // Get the company name for better filtering
+            String companyName = getCompanyNameForSymbol(symbol);
             
-            return client.prepareGet(url)
+            // Create URL for Yahoo Finance API
+            String url = "https://yahoo-finance166.p.rapidapi.com/api/news/list-by-symbol";
+            log.info("Making news API request to URL: {}", url);
+            
+            return client.prepare("GET", url)
                 .addQueryParam("s", symbol)
                 .addQueryParam("region", "US")
-                .addQueryParam("snippetCount", String.valueOf(limit)) // Use limit for snippetCount
                 .setHeader("x-rapidapi-key", apiKey)
-                .setHeader("x-rapidapi-host", "yahoo-finance166.p.rapidapi.com") // Correct host
+                .setHeader("x-rapidapi-host", "yahoo-finance166.p.rapidapi.com")
                 .execute()
                 .toCompletableFuture()
-                .<List<NewsArticle>>thenApply(response -> {
+                .thenApply(response -> {
                     try {
+                        log.info("Received News API response with status code: {}", response.getStatusCode());
+                        
                         if (response.getStatusCode() != 200) {
-                            log.error("News API error {}: {}", response.getStatusCode(), response.getResponseBody());
-                            return new ArrayList<>();
+                            log.error("News API returned non-200 status code: {}", response.getStatusCode());
+                            return articles;
                         }
                         
+                        // Parse the response
                         String responseBody = response.getResponseBody();
-                        log.debug("Raw API response from yahoo-finance166: {}", responseBody);
+                        log.debug("Raw news API response: {}", responseBody);
                         
                         JsonNode root = objectMapper.readTree(responseBody);
-                        List<NewsArticle> articles = new ArrayList<>();
                         
-                        // Determine where the news items are located in the response
-                        JsonNode newsArray = null;
-                        if (root.isArray()) {
-                            newsArray = root;
-                            log.info("Found news items in root array.");
-                        } else if (root.has("items") && root.get("items").isArray()) {
-                            newsArray = root.get("items");
-                            log.info("Found news items in 'items' array.");
-                        } else if (root.has("news") && root.get("news").isArray()) {
-                            newsArray = root.get("news");
-                            log.info("Found news items in 'news' array.");
-                        } else if (root.has("data") && root.get("data").isArray()) {
-                            newsArray = root.get("data");
-                            log.info("Found news items in 'data' array.");
+                        // Determine which endpoint response format this is
+                        List<NewsArticle> processedArticles = new ArrayList<>();
+                        
+                        // Find the data structure
+                        if (root.has("body") && root.get("body").isArray()) {
+                            log.info("Using 'body' array for news items");
+                            processNewsArray(root.get("body"), processedArticles, symbol, companyName, limit);
+                        } else if (root.isArray()) {
+                            log.info("Using root array for news items");
+                            processNewsArray(root, processedArticles, symbol, companyName, limit);
                         } else if (root.has("data") && root.get("data").isObject()) {
-                            // First try: data -> main -> stream
                             if (root.get("data").has("main") && root.get("data").get("main").has("stream")) {
-                                newsArray = root.get("data").get("main").get("stream");
-                                log.info("Found news items in 'data.main.stream' array.");
-                            } 
-                            // Second try: data -> stream
-                            else if (root.get("data").has("stream")) {
-                                newsArray = root.get("data").get("stream");
-                                log.info("Found news items in 'data.stream' array.");
-                            }
-                            // Third try: data -> content
-                            else if (root.get("data").has("content")) {
-                                newsArray = root.get("data").get("content");
-                                log.info("Found news items in 'data.content' array.");
-                            } 
-                            // Fourth try: data -> articles
-                            else if (root.get("data").has("articles")) {
-                                newsArray = root.get("data").get("articles");
-                                log.info("Found news items in 'data.articles' array.");
-                            }
-                            // Fifth try: generically check for any array in data object
-                            else {
-                                Iterator<String> fieldNames = root.get("data").fieldNames();
-                                while (newsArray == null && fieldNames.hasNext()) {
-                                    String field = fieldNames.next();
-                                    if (root.get("data").get(field).isArray()) {
-                                        newsArray = root.get("data").get(field);
-                                        log.info("Found news items in 'data.{}' array.", field);
-                                        break;
-                                    }
-                                }
+                                log.info("Using 'data.main.stream' array for news items");
+                                processNewsArray(root.get("data").get("main").get("stream"), processedArticles, symbol, companyName, limit);
+                            } else if (root.get("data").has("stream")) {
+                                log.info("Using 'data.stream' array for news items");
+                                processNewsArray(root.get("data").get("stream"), processedArticles, symbol, companyName, limit);
+                            } else if (root.get("data").has("news") && root.get("data").get("news").isArray()) {
+                                log.info("Using 'data.news' array for news items");
+                                processNewsArray(root.get("data").get("news"), processedArticles, symbol, companyName, limit);
+                            } else {
+                                log.info("No recognizable news array found in data structure");
                             }
                         } else {
-                            // Log the structure if unfamiliar
-                            log.warn("Unexpected JSON structure from news API. Root keys: {}", 
-                                     StreamSupport.stream(Spliterators.spliteratorUnknownSize(root.fieldNames(), Spliterator.ORDERED), false)
-                                                   .collect(Collectors.joining(", ")));
+                            log.warn("Unrecognized news response structure. Available fields: {}", 
+                                StreamSupport.stream(Spliterators.spliteratorUnknownSize(
+                                    root.fieldNames(), Spliterator.ORDERED), false)
+                                .collect(Collectors.joining(", ")));
                         }
                         
-                        if (newsArray != null) {
-                            log.info("Found {} potential news articles in response.", newsArray.size());
-                            
-                            int addedCount = 0;
-                            for (JsonNode item : newsArray) {
-                                if (addedCount >= limit) break;
-                                
-                                // Use extractArticleV2 as it handles more fields
-                                NewsArticle article = extractArticleV2(item);
-                                
-                                if (article != null) {
-                                    // Check relevance using the existing method
-                                    if (isRelevantToStock(article.getTitle(), article.getSummary(), symbol, companyName)) {
-                                        if (!isDuplicate(articles, article)) {
-                                            articles.add(article);
-                                            addedCount++;
-                                            log.info("Added relevant article ({}): {}", addedCount, article.getTitle());
-                                        } else {
-                                            log.debug("Skipping duplicate article: {}", article.getTitle());
-                                        }
-                                    } else {
-                                        log.debug("Skipping irrelevant article: {}", article.getTitle());
-                                    }
-                                } else {
-                                    log.warn("Failed to extract article from item: {}", item.toString());
-                                }
-                            }
-                            log.info("Finished processing. Added {} relevant articles.", addedCount);
-                        } else {
-                            log.warn("No parsable news array found in API response.");
-                        }
-                        
-                        return articles;
+                        log.info("Processed {} news articles for {}", processedArticles.size(), symbol);
+                        return processedArticles;
                     } catch (Exception e) {
-                        log.error("Error processing news from yahoo-finance166: {} - {}", e.getMessage(), e.getClass().getName(), e);
-                        return new ArrayList<>();
+                        log.error("Error processing news API response: {}", e.getMessage(), e);
+                        return articles;
                     }
                 })
                 .exceptionally(t -> {
@@ -325,56 +296,163 @@ public class RapidApiClient {
         }
     }
     
-    private boolean isRelevantToStock(String title, String summary, String symbol, String companyName) {
-        if (title == null || title.isEmpty()) {
-            log.debug("Relevance check: Skipping article with empty title.");
-            return false;
+    private void processNewsArray(JsonNode newsArray, List<NewsArticle> articles, String symbol, String companyName, int limit) {
+        int count = 0;
+        
+        for (JsonNode item : newsArray) {
+            if (count >= limit) break;
+            
+            try {
+                NewsArticle article = extractArticleV2(item);
+                
+                if (article != null && article.getTitle() != null && !article.getTitle().isEmpty()) {
+                    // Get the title and summary for sentiment analysis
+                    String title = article.getTitle();
+                    String summary = article.getSummary();
+                    String fullText = (title + " " + summary).toLowerCase();
+                    
+                    // Count positive and negative keywords
+                    int positiveCount = countKeywords(fullText, true);
+                    int negativeCount = countKeywords(fullText, false);
+                    
+                    // Log the counts for debugging
+                    log.info("Article '{}' keyword counts: positive={}, negative={}", 
+                        title.length() > 40 ? title.substring(0, 40) + "..." : title,
+                        positiveCount, negativeCount);
+                    
+                    // Determine sentiment based on keyword counts and specific patterns
+                    String sentiment = "neutral";
+                    
+                    // Check for strong negative indicators first
+                    if (containsStrongNegativeIndicators(fullText)) {
+                        sentiment = "negative";
+                    }
+                    // Check for strong positive indicators
+                    else if (containsStrongPositiveIndicators(fullText)) {
+                        sentiment = "positive";
+                    }
+                    // Otherwise, base on keyword counts with a threshold
+                    else if (positiveCount > negativeCount && positiveCount >= 2) {
+                        sentiment = "positive";
+                    } 
+                    else if (negativeCount > positiveCount && negativeCount >= 2) {
+                        sentiment = "negative";
+                    }
+                    
+                    // Set sentiment in the article object
+                    article.setSentiment(sentiment);
+                    
+                    log.info("Final article sentiment for '{}': {}", 
+                        title.length() > 40 ? title.substring(0, 40) + "..." : title,
+                        sentiment);
+                    
+                    if (!isDuplicate(articles, article)) {
+                        articles.add(article);
+                        count++;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Error extracting article from item: {}", e.getMessage());
+            }
         }
+    }
+    
+    // Helper method to count keywords
+    private int countKeywords(String text, boolean positiveKeywords) {
+        String[] keywords = positiveKeywords ? getPositiveKeywords() : getNegativeKeywords();
+        int count = 0;
         
-        String textToCheck = (title + " " + (summary != null ? summary : "")).toLowerCase();
-        String symbolLower = symbol.toLowerCase();
-        String companyLower = (companyName != null && !companyName.isEmpty()) ? companyName.toLowerCase() : "";
-        
-        // Primary Check: Direct mention of symbol or company name
-        boolean containsSymbol = textToCheck.contains(symbolLower);
-        boolean containsCompany = !companyLower.isEmpty() && textToCheck.contains(companyLower);
-        boolean isDirectlyRelevant = containsSymbol || containsCompany;
-        
-        log.debug("Relevance Check:");
-        log.debug("  Symbol: '{}', Company: '{}'", symbol, companyName);
-        log.debug("  Title: '{}'", title);
-        log.debug("  Summary: '{}'", summary != null ? summary : "N/A");
-        log.debug("  Text Checked (lower): '{}'", textToCheck);
-        log.debug("  Contains Symbol ('{}'): {}", symbolLower, containsSymbol);
-        log.debug("  Contains Company ('{}'): {}", companyLower, containsCompany);
-        log.debug("  Directly Relevant: {}", isDirectlyRelevant);
-
-        if (isDirectlyRelevant) {
-            log.debug("  Result: Relevant (Direct Match)");
-            return true;
-        }
-        
-        // Secondary Check: Check for common financial terms if no direct match
-        String[] financialTerms = {
-            "stock", "shares", "market", "trading", "price", "investor", 
-            "earnings", "revenue", "profit", "growth", "performance",
-            "dividend", "analyst", "target price", "valuation", "market cap",
-            symbolLower // Also include the symbol itself in terms check
-        };
-        
-        int financialTermCount = 0;
-        for (String term : financialTerms) {
-            if (textToCheck.contains(term)) {
-                financialTermCount++;
+        for (String keyword : keywords) {
+            // Count how many times the keyword appears
+            String lowerKeyword = keyword.toLowerCase();
+            
+            // For multi-word phrases, do exact matching
+            if (lowerKeyword.contains(" ")) {
+                if (text.contains(lowerKeyword)) {
+                    count++;
+                    log.debug("Found {} keyword phrase: '{}'", 
+                        positiveKeywords ? "positive" : "negative", keyword);
+                }
+            } 
+            // For single words, check for word boundaries to avoid partial matches
+            else {
+                String wordPattern = "\\b" + Pattern.quote(lowerKeyword) + "\\b";
+                Pattern pattern = Pattern.compile(wordPattern);
+                Matcher matcher = pattern.matcher(text);
+                
+                while (matcher.find()) {
+                    count++;
+                    log.debug("Found {} keyword: '{}'", 
+                        positiveKeywords ? "positive" : "negative", keyword);
+                }
             }
         }
         
-        boolean isIndirectlyRelevant = financialTermCount >= 2; // Require at least 2 terms
-        log.debug("  Financial Terms Found: {}", financialTermCount);
-        log.debug("  Indirectly Relevant (>=2 terms): {}", isIndirectlyRelevant);
-        log.debug("  Result: {}", isIndirectlyRelevant ? "Relevant (Indirect Match)" : "Irrelevant");
-
-        return isIndirectlyRelevant;
+        return count;
+    }
+    
+    // Strong negative indicators that should override other analysis
+    private boolean containsStrongNegativeIndicators(String text) {
+        String[] strongNegatives = {
+            "stock down", "stocks down", "shares down", "shares fall", "stock falls", "stocks fall",
+            "market crash", "stock crash", "shares crash", "sell-off", "selling off",
+            "worst day", "worst week", "worst month", "big drop", "sharp decline",
+            "heavy losses", "major losses", "tumbles", "plunges", "disaster",
+            "disappointing earnings", "missed expectations", "below forecast",
+            "layoffs", "job cuts", "bankruptcy", "class action", "fraud", "investigation"
+        };
+        
+        for (String phrase : strongNegatives) {
+            if (text.contains(phrase)) {
+                log.debug("Found strong negative indicator: '{}'", phrase);
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    // Strong positive indicators that should override other analysis
+    private boolean containsStrongPositiveIndicators(String text) {
+        String[] strongPositives = {
+            "stock up", "stocks up", "shares up", "shares rise", "stock rises", "stocks rise",
+            "breakout", "record high", "all-time high", "new high", "multi-year high",
+            "beats expectations", "exceeds forecast", "strong earnings", "strong quarter",
+            "dividend increase", "raised guidance", "buy rating", "strong buy",
+            "best day", "best week", "best month", "big gain", "sharp increase",
+            "major gains", "soars", "surges", "rallies", "jumps"
+        };
+        
+        for (String phrase : strongPositives) {
+            if (text.contains(phrase)) {
+                log.debug("Found strong positive indicator: '{}'", phrase);
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    // Get a refined list of positive keywords
+    private String[] getPositiveKeywords() {
+        return new String[] {
+            // Strong positive financial terms
+            "rally", "surge", "soar", "jump", "beat expectations", "exceed estimates",
+            "upgrade", "bullish", "buy rating", "outperform", "strong growth",
+            "record revenue", "record profit", "market leader", "increased dividend",
+            "profit", "profitable", "promising", "momentum", "recovery", "breakthrough"
+        };
+    }
+    
+    // Get a refined list of negative keywords
+    private String[] getNegativeKeywords() {
+        return new String[] {
+            // Strong negative financial terms
+            "decline", "drop", "fall", "slip", "slump", "tumble", "plunge", "crash",
+            "bearish", "downgrade", "sell rating", "underperform", "miss expectations",
+            "below estimates", "downside", "negative", "weak", "loss", "struggling",
+            "concern", "risk", "uncertainty", "volatility", "warning", "crisis"
+        };
     }
     
     /**
@@ -944,13 +1022,18 @@ public class RapidApiClient {
             "beat earnings", "revenue growth", "market leader", "cost reduction", "synergies",
             "strategic acquisition", "expansion", "innovation", "improved guidance",
             // Additional terms
-            "biggest bargain", "investing aggressively", "all-time high", "stock rise", "stocks rise"
+            "biggest bargain", "investing aggressively", "all-time high", "stock rise", "stocks rise",
+            // Modern terms
+            "AI", "artificial intelligence", "blockchain", "crypto", "metaverse", "cloud computing",
+            "digital transformation", "e-commerce", "streaming", "subscription", "recurring revenue",
+            "market share", "competitive advantage", "moat", "scalable", "disruptive", "innovative",
+            "partnership", "collaboration", "integration", "acquisition", "merger", "deal",
+            "expansion", "growth", "scale", "efficiency", "productivity", "automation"
         };
         
         text = text.toLowerCase();
         for (String keyword : keywords) {
-            // Make matching less restrictive - just check if text contains the keyword
-            if (text.contains(keyword)) {
+            if (text.contains(keyword.toLowerCase())) {
                 log.debug("Found positive keyword: '{}' in text", keyword);
                 return true;
             }
@@ -975,14 +1058,19 @@ public class RapidApiClient {
             "restructuring", "layoffs", "downtime", "investigation", "lawsuit", "recall",
             "regulatory issue", "delayed", "lowered guidance", "margin pressure",
             // Additional terms
-            "crushing", "tariffs", "export controls", "falling", "trading lower", "stock down"
+            "crushing", "tariffs", "export controls", "falling", "trading lower", "stock down",
+            // Modern terms
+            "cybersecurity", "data breach", "privacy", "regulation", "compliance", "fine",
+            "penalty", "investigation", "lawsuit", "class action", "settlement", "violation",
+            "hack", "outage", "downtime", "disruption", "supply chain", "shortage", "inflation",
+            "interest rates", "rate hike", "recession", "slowdown", "downturn", "correction",
+            "bubble", "overvalued", "valuation", "expensive", "premium", "competition",
+            "market share loss", "subscriber loss", "user decline", "engagement drop"
         };
         
         text = text.toLowerCase();
         for (String keyword : keywords) {
-            // Make matching less restrictive - just check if text contains the keyword
-            // This matches the behavior of containsPositiveKeywords
-            if (text.contains(keyword)) {
+            if (text.contains(keyword.toLowerCase())) {
                 log.debug("Found negative keyword: '{}' in text", keyword);
                 return true;
             }
@@ -1001,5 +1089,57 @@ public class RapidApiClient {
         result.put("score", 0.0);
         result.put("analyzedArticles", new ArrayList<>());
         return result;
+    }
+
+    private boolean isRelevantToStock(String title, String summary, String symbol, String companyName) {
+        if (title == null || title.isEmpty()) {
+            log.debug("Relevance check: Skipping article with empty title.");
+            return false;
+        }
+        
+        String textToCheck = (title + " " + (summary != null ? summary : "")).toLowerCase();
+        String symbolLower = symbol.toLowerCase();
+        String companyLower = (companyName != null && !companyName.isEmpty()) ? companyName.toLowerCase() : "";
+        
+        // Primary Check: Direct mention of symbol or company name
+        boolean containsSymbol = textToCheck.contains(symbolLower);
+        boolean containsCompany = !companyLower.isEmpty() && textToCheck.contains(companyLower);
+        boolean isDirectlyRelevant = containsSymbol || containsCompany;
+        
+        log.debug("Relevance Check:");
+        log.debug("  Symbol: '{}', Company: '{}'", symbol, companyName);
+        log.debug("  Title: '{}'", title);
+        log.debug("  Summary: '{}'", summary != null ? summary : "N/A");
+        log.debug("  Text Checked (lower): '{}'", textToCheck);
+        log.debug("  Contains Symbol ('{}'): {}", symbolLower, containsSymbol);
+        log.debug("  Contains Company ('{}'): {}", companyLower, containsCompany);
+        log.debug("  Directly Relevant: {}", isDirectlyRelevant);
+
+        if (isDirectlyRelevant) {
+            log.debug("  Result: Relevant (Direct Match)");
+            return true;
+        }
+        
+        // Secondary Check: Check for common financial terms if no direct match
+        String[] financialTerms = {
+            "stock", "shares", "market", "trading", "price", "investor", 
+            "earnings", "revenue", "profit", "growth", "performance",
+            "dividend", "analyst", "target price", "valuation", "market cap",
+            symbolLower // Also include the symbol itself in terms check
+        };
+        
+        int financialTermCount = 0;
+        for (String term : financialTerms) {
+            if (textToCheck.contains(term)) {
+                financialTermCount++;
+            }
+        }
+        
+        boolean isIndirectlyRelevant = financialTermCount >= 2; // Require at least 2 terms
+        log.debug("  Financial Terms Found: {}", financialTermCount);
+        log.debug("  Indirectly Relevant (>=2 terms): {}", isIndirectlyRelevant);
+        log.debug("  Result: {}", isIndirectlyRelevant ? "Relevant (Indirect Match)" : "Irrelevant");
+
+        return isIndirectlyRelevant;
     }
 }

@@ -302,12 +302,9 @@ const Analysis = ({ selectedStock }) => {
             
             console.log(`Sentiment distribution - Positive: ${positiveCount}, Neutral: ${neutralCount}, Negative: ${negativeCount}`);
             
-            // If all articles are showing as neutral, let's force some variance for testing
-            if (positiveCount === 0 && negativeCount === 0 && neutralCount > 0) {
-              console.log('All articles are neutral, adding some variance for testing.');
-              response.data.newsSentiment.positiveCount = Math.floor(neutralCount * 0.3);
-              response.data.newsSentiment.negativeCount = Math.floor(neutralCount * 0.2);
-              response.data.newsSentiment.neutralCount = neutralCount - response.data.newsSentiment.positiveCount - response.data.newsSentiment.negativeCount;
+            // Log the analyzed articles for debugging
+            if (response.data.newsSentiment.analyzedArticles) {
+              console.log('Analyzed articles:', response.data.newsSentiment.analyzedArticles);
             }
             
             sentimentData = response.data.newsSentiment;
@@ -316,12 +313,28 @@ const Analysis = ({ selectedStock }) => {
           const formattedNews = response.data.recentNews.map(article => {
             // Try to find matching sentiment for this article if available
             let articleSentiment = 'neutral';
-            if (sentimentData && sentimentData.analyzedArticles) {
-              const matchingSentiment = sentimentData.analyzedArticles.find(
+            if (sentimentData && sentimentData.analyzedArticles && sentimentData.analyzedArticles.length > 0) {
+              // Try multiple matching approaches
+              // 1. Exact title match
+              let matchingSentiment = sentimentData.analyzedArticles.find(
                 item => item.title === article.title
               );
+              
+              // 2. If no exact match, try substring match
+              if (!matchingSentiment) {
+                matchingSentiment = sentimentData.analyzedArticles.find(
+                  item => {
+                    if (!item.title || !article.title) return false;
+                    return item.title.includes(article.title) || article.title.includes(item.title);
+                  }
+                );
+              }
+              
               if (matchingSentiment) {
                 articleSentiment = matchingSentiment.sentiment;
+                console.log(`Sentiment matched for article: "${article.title.substring(0, 30)}..." => ${articleSentiment}`);
+              } else {
+                console.log(`No sentiment match found for article: "${article.title.substring(0, 30)}..."`);
               }
             }
             
