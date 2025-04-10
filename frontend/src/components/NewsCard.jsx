@@ -55,6 +55,22 @@ function NewsCard({ news }) {
                 <span>{article.source}</span>
                 <span className="mx-2">•</span>
                 <span>{article.date}</span>
+                {article.sentiment && (
+                  <>
+                    <span className="mx-2">•</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      article.sentiment === 'positive' 
+                        ? 'bg-green-500/20 text-green-400' 
+                        : article.sentiment === 'negative'
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      {article.sentiment === 'positive' ? '↑ Positive' : 
+                       article.sentiment === 'negative' ? '↓ Negative' : 
+                       'Neutral'}
+                    </span>
+                  </>
+                )}
               </div>
               <p className={`${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} text-sm line-clamp-3 flex-grow`}>
                 {article.summary}

@@ -82,12 +82,43 @@ public class RapidApiClient {
                             return createErrorResponse("No news sentiment data available");
                         }
                         
-                        JsonNode root = objectMapper.readTree(response.getResponseBody());
-                        if (!root.has("body") || !root.get("body").isArray()) {
-                            return createErrorResponse("No news data available");
+                        // Log response for debugging
+                        String responseBody = response.getResponseBody();
+                        log.debug("Raw sentiment API response: {}", responseBody);
+                        
+                        JsonNode root = objectMapper.readTree(responseBody);
+                        
+                        // Determine where the news items are located in the response (same logic as news fetching)
+                        JsonNode newsArray = null;
+                        
+                        if (root.has("body") && root.get("body").isArray()) {
+                            // Old structure
+                            newsArray = root.get("body");
+                            log.info("Found sentiment items in 'body' array");
+                        } else if (root.isArray()) {
+                            newsArray = root;
+                            log.info("Found sentiment items in root array");
+                        } else if (root.has("data") && root.get("data").isObject()) {
+                            // New structure handling
+                            if (root.get("data").has("main") && root.get("data").get("main").has("stream")) {
+                                newsArray = root.get("data").get("main").get("stream");
+                                log.info("Found sentiment items in 'data.main.stream' array");
+                            } else if (root.get("data").has("stream")) {
+                                newsArray = root.get("data").get("stream");
+                                log.info("Found sentiment items in 'data.stream' array");
+                            } else if (root.get("data").has("news") && root.get("data").get("news").isArray()) {
+                                newsArray = root.get("data").get("news");
+                                log.info("Found sentiment items in 'data.news' array");
+                            } 
                         }
                         
-                        JsonNode newsArray = root.get("body");
+                        if (newsArray == null) {
+                            log.warn("No parsable news array found for sentiment analysis. Root keys: {}", 
+                                StreamSupport.stream(Spliterators.spliteratorUnknownSize(
+                                    root.fieldNames(), Spliterator.ORDERED), false)
+                                .collect(Collectors.joining(", ")));
+                            return createErrorResponse("No news data available for sentiment analysis");
+                        }
                         int positiveCount = 0;
                         int negativeCount = 0;
                         int neutralCount = 0;
@@ -205,6 +236,39 @@ public class RapidApiClient {
                         } else if (root.has("data") && root.get("data").isArray()) {
                             newsArray = root.get("data");
                             log.info("Found news items in 'data' array.");
+                        } else if (root.has("data") && root.get("data").isObject()) {
+                            // First try: data -> main -> stream
+                            if (root.get("data").has("main") && root.get("data").get("main").has("stream")) {
+                                newsArray = root.get("data").get("main").get("stream");
+                                log.info("Found news items in 'data.main.stream' array.");
+                            } 
+                            // Second try: data -> stream
+                            else if (root.get("data").has("stream")) {
+                                newsArray = root.get("data").get("stream");
+                                log.info("Found news items in 'data.stream' array.");
+                            }
+                            // Third try: data -> content
+                            else if (root.get("data").has("content")) {
+                                newsArray = root.get("data").get("content");
+                                log.info("Found news items in 'data.content' array.");
+                            } 
+                            // Fourth try: data -> articles
+                            else if (root.get("data").has("articles")) {
+                                newsArray = root.get("data").get("articles");
+                                log.info("Found news items in 'data.articles' array.");
+                            }
+                            // Fifth try: generically check for any array in data object
+                            else {
+                                Iterator<String> fieldNames = root.get("data").fieldNames();
+                                while (newsArray == null && fieldNames.hasNext()) {
+                                    String field = fieldNames.next();
+                                    if (root.get("data").get(field).isArray()) {
+                                        newsArray = root.get("data").get(field);
+                                        log.info("Found news items in 'data.{}' array.", field);
+                                        break;
+                                    }
+                                }
+                            }
                         } else {
                             // Log the structure if unfamiliar
                             log.warn("Unexpected JSON structure from news API. Root keys: {}", 
@@ -496,12 +560,29 @@ public class RapidApiClient {
         try {
             log.debug("Processing news item: {}", item.toString());
             
+            // Check if the item has a nested content object (new structure)
+            JsonNode contentNode = item;
+            if (item.has("content") && item.get("content").isObject()) {
+                contentNode = item.get("content");
+                log.debug("Found nested content structure in news item");
+            }
+            
             // Extract required fields
-            String title = item.has("title") ? item.get("title").asText("") : "";
+            String title = contentNode.has("title") ? contentNode.get("title").asText("") : "";
             if (title.isEmpty()) return null;
             
-            String link = item.has("link") ? item.get("link").asText("") : 
-                         item.has("url") ? item.get("url").asText("") : "";
+            // Handle new nested URL structure
+            String link = "";
+            if (contentNode.has("link")) {
+                link = contentNode.get("link").asText("");
+            } else if (contentNode.has("url")) {
+                link = contentNode.get("url").asText("");
+            } else if (contentNode.has("clickThroughUrl") && contentNode.get("clickThroughUrl").has("url")) {
+                link = contentNode.get("clickThroughUrl").get("url").asText("");
+            } else if (contentNode.has("canonicalUrl") && contentNode.get("canonicalUrl").has("url")) {
+                link = contentNode.get("canonicalUrl").get("url").asText("");
+            }
+            
             if (link.isEmpty()) return null;
             
             // Create article
@@ -510,20 +591,37 @@ public class RapidApiClient {
             article.setUrl(link);
             
             // Publisher/source
-            String source = item.has("source") ? item.get("source").asText("") : 
-                          item.has("publisher") ? item.get("publisher").asText("") : "Yahoo Finance";
+            String source = "Yahoo Finance";
+            if (contentNode.has("source") && !contentNode.get("source").isNull()) {
+                source = contentNode.get("source").asText("Yahoo Finance");
+            } else if (contentNode.has("publisher") && !contentNode.get("publisher").isNull()) {
+                source = contentNode.get("publisher").asText("Yahoo Finance");
+            } else if (contentNode.has("provider") && contentNode.get("provider").has("displayName")) {
+                source = contentNode.get("provider").get("displayName").asText("Yahoo Finance");
+            }
             article.setSource(source);
             
             // Date
-            String pubDate = item.has("pubDate") ? item.get("pubDate").asText("") :
-                           item.has("published") ? item.get("published").asText("") :
-                           item.has("date") ? item.get("date").asText("") : "";
+            String pubDate = "";
+            if (contentNode.has("pubDate")) {
+                pubDate = contentNode.get("pubDate").asText("");
+            } else if (contentNode.has("published")) {
+                pubDate = contentNode.get("published").asText("");
+            } else if (contentNode.has("date")) {
+                pubDate = contentNode.get("date").asText("");
+            }
             article.setPublishedDate(formatDate(pubDate));
             
-            // Summary
-            String summary = item.has("description") ? item.get("description").asText("") : 
-                           item.has("content") ? item.get("content").asText("") :
-                           item.has("summary") ? item.get("summary").asText("") : "No summary available";
+            // Summary - For new structure, there may not be a dedicated summary field
+            String summary = "No summary available";
+            if (contentNode.has("description")) {
+                summary = contentNode.get("description").asText("No summary available");
+            } else if (contentNode.has("summary")) {
+                summary = contentNode.get("summary").asText("No summary available");
+            } else if (item.has("summary")) {
+                // Some APIs put summary at the top level
+                summary = item.get("summary").asText("No summary available");
+            }
             article.setSummary(summary);
             
             // Enhanced thumbnail handling for v2
@@ -531,16 +629,39 @@ public class RapidApiClient {
             
             // Log all available fields to help debug thumbnail issues
             StringBuilder fields = new StringBuilder();
-            Iterator<String> fieldNames = item.fieldNames();
+            Iterator<String> fieldNames = contentNode.fieldNames();
             while (fieldNames.hasNext()) {
                 fields.append(fieldNames.next()).append(", ");
             }
-            log.debug("Available fields in news item: {}", fields.toString());
+            log.debug("Available fields in news content: {}", fields.toString());
             
             // Try different possible thumbnail fields in v2 response
-            if (item.has("thumbnail") && !item.get("thumbnail").asText("").isEmpty()) {
-                thumbnail = item.get("thumbnail").asText("");
-                log.debug("Found thumbnail in 'thumbnail' field: {}", thumbnail);
+            // New structure has a complex thumbnail object with resolutions
+            if (contentNode.has("thumbnail") && contentNode.get("thumbnail").isObject() && 
+                contentNode.get("thumbnail").has("resolutions") && 
+                contentNode.get("thumbnail").get("resolutions").isArray()) {
+                
+                JsonNode resolutions = contentNode.get("thumbnail").get("resolutions");
+                // Try to get the original resolution first
+                for (JsonNode resolution : resolutions) {
+                    if (resolution.has("tag") && resolution.get("tag").asText("").equals("original") &&
+                        resolution.has("url")) {
+                        thumbnail = resolution.get("url").asText("");
+                        log.debug("Found thumbnail in resolutions with tag 'original': {}", thumbnail);
+                        break;
+                    }
+                }
+                
+                // If no original found, take the first available one
+                if (thumbnail == null && resolutions.size() > 0 && resolutions.get(0).has("url")) {
+                    thumbnail = resolutions.get(0).get("url").asText("");
+                    log.debug("Found thumbnail in first resolution: {}", thumbnail);
+                }
+            }
+            // Fallback to old structures
+            else if (contentNode.has("thumbnail") && !contentNode.get("thumbnail").isNull()) {
+                thumbnail = contentNode.get("thumbnail").asText("");
+                log.debug("Found thumbnail in simple 'thumbnail' field: {}", thumbnail);
             } else if (item.has("image") && !item.get("image").asText("").isEmpty()) {
                 thumbnail = item.get("image").asText("");
                 log.debug("Found thumbnail in 'image' field: {}", thumbnail);
@@ -811,10 +932,28 @@ public class RapidApiClient {
      * Check if text contains positive keywords
      */
     private boolean containsPositiveKeywords(String text) {
-        String[] keywords = {"up", "rise", "gain", "positive", "strong", "growth", "profit", "success"};
+        String[] keywords = {
+            // Basic positive terms
+            "up", "rise", "gain", "positive", "strong", "growth", "profit", "success",
+            // Expanded financial positive terms
+            "outperform", "beat", "exceed", "upgrade", "bullish", "rally", "surge", "soar", 
+            "jump", "boost", "upside", "opportunity", "recovery", "breakthrough", "momentum", 
+            "optimistic", "promising", "favorable", "advantage", "strength", "performance",
+            // Specific financial positive phrases
+            "above consensus", "buy rating", "price target increase", "new high", "dividend increase",
+            "beat earnings", "revenue growth", "market leader", "cost reduction", "synergies",
+            "strategic acquisition", "expansion", "innovation", "improved guidance",
+            // Additional terms
+            "biggest bargain", "investing aggressively", "all-time high", "stock rise", "stocks rise"
+        };
+        
         text = text.toLowerCase();
         for (String keyword : keywords) {
-            if (text.contains(keyword)) return true;
+            // Make matching less restrictive - just check if text contains the keyword
+            if (text.contains(keyword)) {
+                log.debug("Found positive keyword: '{}' in text", keyword);
+                return true;
+            }
         }
         return false;
     }
@@ -823,10 +962,30 @@ public class RapidApiClient {
      * Check if text contains negative keywords
      */
     private boolean containsNegativeKeywords(String text) {
-        String[] keywords = {"down", "fall", "drop", "negative", "weak", "loss", "decline", "miss"};
+        String[] keywords = {
+            // Basic negative terms
+            "down", "fall", "drop", "negative", "weak", "loss", "decline", "miss",
+            // Expanded financial negative terms
+            "underperform", "downgrade", "bearish", "sink", "plunge", "tumble", "slip", "slump",
+            "crash", "recession", "sell-off", "downside", "risk", "concern", "disappoint", "struggle",
+            "pressure", "uncertainty", "volatility", "warning", "crisis", "challenge", "headwind",
+            // Specific financial negative phrases
+            "below estimates", "sell rating", "price target cut", "new low", "dividend cut",
+            "missed earnings", "revenue decline", "competitive pressure", "cost increase", "debt",
+            "restructuring", "layoffs", "downtime", "investigation", "lawsuit", "recall",
+            "regulatory issue", "delayed", "lowered guidance", "margin pressure",
+            // Additional terms
+            "crushing", "tariffs", "export controls", "falling", "trading lower", "stock down"
+        };
+        
         text = text.toLowerCase();
         for (String keyword : keywords) {
-            if (text.contains(keyword)) return true;
+            // Make matching less restrictive - just check if text contains the keyword
+            // This matches the behavior of containsPositiveKeywords
+            if (text.contains(keyword)) {
+                log.debug("Found negative keyword: '{}' in text", keyword);
+                return true;
+            }
         }
         return false;
     }

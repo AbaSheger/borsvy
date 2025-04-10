@@ -340,25 +340,46 @@ public class StockService {
             log.info("Getting news sentiment for symbol: {}", symbol);
             
             // Try SerpApi first
+            boolean serpApiSuccess = false;
             try {
+                log.info("Attempting to use SerpAPI for sentiment analysis...");
                 Map<String, Object> serpApiSentiment = serpApiClient.getNewsSentiment(symbol);
-                if (serpApiSentiment != null && !serpApiSentiment.containsKey("error")) {
-                    log.info("Successfully got sentiment from SerpApi");
-                    return serpApiSentiment;
+                
+                // Better check for API limit errors
+                if (serpApiSentiment != null) {
+                    if (!serpApiSentiment.containsKey("error") || 
+                        (serpApiSentiment.containsKey("error") && 
+                         !serpApiSentiment.get("error").toString().toLowerCase().contains("limit"))) {
+                        
+                        log.info("Successfully got sentiment from SerpApi");
+                        serpApiSuccess = true;
+                        return serpApiSentiment;
+                    } else {
+                        log.warn("SerpAPI limit reached or error encountered: {}. Falling back to RapidApi", 
+                                serpApiSentiment.getOrDefault("error", "Unknown error"));
+                    }
+                } else {
+                    log.warn("SerpAPI returned null result. Falling back to RapidApi");
                 }
             } catch (Exception e) {
                 log.warn("Error getting sentiment from SerpApi: {}. Falling back to RapidApi", e.getMessage());
             }
             
-            // Fallback to RapidApi
-            try {
-                Map<String, Object> rapidApiSentiment = rapidApiClient.getNewsSentiment(symbol);
-                if (rapidApiSentiment != null && !rapidApiSentiment.containsKey("error")) {
-                    log.info("Successfully got sentiment from RapidApi (fallback)");
-                    return rapidApiSentiment;
+            // Fallback to RapidApi if SerpApi failed
+            if (!serpApiSuccess) {
+                try {
+                    log.info("Attempting to use RapidAPI for sentiment analysis (fallback)...");
+                    Map<String, Object> rapidApiSentiment = rapidApiClient.getNewsSentiment(symbol);
+                    if (rapidApiSentiment != null && !rapidApiSentiment.containsKey("error")) {
+                        log.info("Successfully got sentiment from RapidApi (fallback)");
+                        return rapidApiSentiment;
+                    } else {
+                        log.warn("RapidAPI sentiment analysis failed: {}", 
+                                rapidApiSentiment != null ? rapidApiSentiment.getOrDefault("error", "Unknown error") : "Null response");
+                    }
+                } catch (Exception e) {
+                    log.error("Error getting sentiment from RapidApi (fallback): {}", e.getMessage());
                 }
-            } catch (Exception e) {
-                log.error("Error getting sentiment from RapidApi (fallback): {}", e.getMessage());
             }
             
             // If both APIs fail, return neutral sentiment
@@ -386,29 +407,51 @@ public class StockService {
             log.info("Fetching news for symbol: {} with limit: {}", symbol, limit);
             
             // Try SerpApi first
+            boolean serpApiSuccess = false;
             List<Map<String, Object>> serpApiNews = null;
             try {
+                log.info("Attempting to use SerpAPI for news...");
                 serpApiNews = serpApiClient.getStockNews(symbol, limit);
+                
+                // Better detection of API limit errors
                 if (serpApiNews != null && !serpApiNews.isEmpty()) {
-                    log.info("Successfully fetched {} news articles from SerpApi", serpApiNews.size());
-                    List<NewsArticle> articles = convertToNewsArticles(serpApiNews);
-                    if (!articles.isEmpty()) {
-                        return articles;
+                    // Check if there's an error message that indicates API limit
+                    boolean hasApiLimitError = serpApiNews.stream()
+                        .anyMatch(article -> article.containsKey("error") && 
+                                 article.get("error") != null && 
+                                 article.get("error").toString().toLowerCase().contains("limit"));
+                    
+                    if (!hasApiLimitError) {
+                        log.info("Successfully fetched {} news articles from SerpApi", serpApiNews.size());
+                        List<NewsArticle> articles = convertToNewsArticles(serpApiNews);
+                        if (!articles.isEmpty()) {
+                            serpApiSuccess = true;
+                            return articles;
+                        }
+                    } else {
+                        log.warn("SerpAPI limit reached. Falling back to RapidApi");
                     }
+                } else {
+                    log.warn("SerpAPI returned no results. Falling back to RapidApi");
                 }
             } catch (Exception e) {
                 log.warn("Error fetching news from SerpApi: {}. Falling back to RapidApi", e.getMessage());
             }
             
-            // Fallback to RapidApi
-            try {
-                List<NewsArticle> rapidApiNews = rapidApiClient.getStockNews(symbol, limit);
-                if (rapidApiNews != null && !rapidApiNews.isEmpty()) {
-                    log.info("Successfully fetched {} news articles from RapidApi (fallback)", rapidApiNews.size());
-                    return rapidApiNews;
+            // Fallback to RapidApi if SerpApi failed
+            if (!serpApiSuccess) {
+                try {
+                    log.info("Attempting to use RapidAPI for news (fallback)...");
+                    List<NewsArticle> rapidApiNews = rapidApiClient.getStockNews(symbol, limit);
+                    if (rapidApiNews != null && !rapidApiNews.isEmpty()) {
+                        log.info("Successfully fetched {} news articles from RapidApi (fallback)", rapidApiNews.size());
+                        return rapidApiNews;
+                    } else {
+                        log.warn("RapidAPI returned no news results");
+                    }
+                } catch (Exception e) {
+                    log.error("Error fetching news from RapidApi (fallback): {}", e.getMessage());
                 }
-            } catch (Exception e) {
-                log.error("Error fetching news from RapidApi (fallback): {}", e.getMessage());
             }
             
             // If both APIs fail, return empty list
