@@ -572,6 +572,7 @@ public class LLMAnalysisService implements NewsAnalysisService {
      */
     public Map<String, Object> analyzeNewsSentiment(String symbol, List<com.borsvy.model.NewsArticle> newsArticles) {
         log.info("Analyzing news sentiment for {} with {} articles", symbol, newsArticles.size());
+        log.info("API Key status: {}", apiKey.equals("fallback") ? "Using fallback (no API key found)" : "API key found");
         Map<String, Object> result = new HashMap<>();
         
         try {
@@ -588,6 +589,7 @@ public class LLMAnalysisService implements NewsAnalysisService {
             
             // Try using Groq API if configured
             if (!apiKey.equals("fallback")) {
+                log.debug("Attempting to use Groq API with model: {}", modelId);
                 try {
                     HttpHeaders headers = new HttpHeaders();
                     headers.setContentType(MediaType.APPLICATION_JSON);
@@ -711,7 +713,9 @@ public class LLMAnalysisService implements NewsAnalysisService {
         
         prompt.append("\nBased on these headlines, determine if the overall news sentiment for ");
         prompt.append(symbol).append(" is POSITIVE, NEGATIVE, or NEUTRAL. ");
-        prompt.append("Focus on how these headlines might impact stock price.\n\n");
+        prompt.append("Be particularly attentive to negative signals in the headlines. Headlines discussing drops, losses, ");
+        prompt.append("concerns, investigations, layoffs, or market problems should generally be classified as NEGATIVE. ");
+        prompt.append("Focus on how these headlines would likely impact stock price from an investor perspective.\n\n");
         prompt.append("First provide the SENTIMENT and CONFIDENCE, then the article breakdown.");
         
         return prompt.toString();
@@ -736,37 +740,70 @@ public class LLMAnalysisService implements NewsAnalysisService {
      * Simple keyword-based sentiment analysis for news articles (fallback method)
      */
     private String calculateSimpleNewsSentiment(List<com.borsvy.model.NewsArticle> newsArticles) {
-        int positiveScore = 0;
-        int negativeScore = 0;
+        double positiveScore = 0;
+        double negativeScore = 0;
         
         // Keywords that typically indicate positive/negative sentiment in financial news
         String[] positiveWords = {"surge", "gain", "rise", "jump", "high", "growth", "profit", "up", "boost", 
                                 "soar", "bullish", "beat", "exceed", "positive", "strong", "success"};
         
+        // Expanded list of negative keywords with more financial terms
         String[] negativeWords = {"drop", "fall", "decline", "plunge", "low", "down", "loss", "miss", "weak", 
-                                "bearish", "sink", "crash", "tumble", "negative", "failed", "concern"};
+                                "bearish", "sink", "crash", "tumble", "negative", "failed", "concern", "worry",
+                                "cut", "slump", "layoff", "bankruptcy", "debt", "warn", "struggle", "crisis",
+                                "scandal", "investigation", "lawsuit", "worse", "disappointing", "recall",
+                                "halt", "delay", "risk", "danger", "threat", "dispute", "penalty", "fine"};
+                                
+        // Strong negative words that should be weighted more heavily
+        String[] strongNegativeWords = {"crash", "plunge", "bankruptcy", "crisis", "scandal", "lawsuit", "tumble", "collapse"};
         
-        // Count occurrences of positive and negative keywords
+        // Count occurrences of positive and negative keywords in each article
         for (com.borsvy.model.NewsArticle article : newsArticles) {
             String title = article.getTitle().toLowerCase();
+            double articlePositive = 0;
+            double articleNegative = 0;
             
+            // Check for positive words
             for (String word : positiveWords) {
                 if (title.contains(word.toLowerCase())) {
-                    positiveScore++;
+                    articlePositive++;
                 }
             }
             
+            // Check for negative words with stronger weight for certain terms
             for (String word : negativeWords) {
                 if (title.contains(word.toLowerCase())) {
-                    negativeScore++;
+                    // Check if this is a strong negative word
+                    boolean isStrongNegative = false;
+                    for (String strongWord : strongNegativeWords) {
+                        if (word.equals(strongWord)) {
+                            isStrongNegative = true;
+                            break;
+                        }
+                    }
+                    
+                    // Apply higher weight for strong negative words
+                    articleNegative += isStrongNegative ? 1.5 : 1.0;
                 }
+            }
+            
+            // Add scores from this article
+            positiveScore += articlePositive;
+            negativeScore += articleNegative;
+            
+            // If an article has more negative than positive words, consider it more important
+            if (articleNegative > articlePositive) {
+                negativeScore += 0.5; // Add a bonus for articles with clear negative sentiment
             }
         }
         
-        // Determine sentiment based on keyword counts
-        if (positiveScore > negativeScore + 2) {
+        // Log the scores for debugging
+        log.debug("News sentiment analysis scores - Positive: {}, Negative: {}", positiveScore, negativeScore);
+        
+        // Determine sentiment based on keyword counts with lower threshold for negative
+        if (positiveScore > negativeScore + 1.5) {
             return "POSITIVE";
-        } else if (negativeScore > positiveScore + 2) {
+        } else if (negativeScore > positiveScore) { // Reduced threshold for negative sentiment
             return "NEGATIVE";
         } else {
             return "NEUTRAL";

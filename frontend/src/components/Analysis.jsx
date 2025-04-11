@@ -435,11 +435,14 @@ const Analysis = ({ selectedStock }) => {
               console.log(`Will assign dominant sentiment to ${dominantCount} articles`);
               
               let dominantSentiment = 'neutral';
-              if (overallSentiment.includes('positive')) {
+              // Better check for sentiment values in the overall sentiment
+              if (overallSentiment.includes('positive') || overallSentiment === 'positive') {
                 dominantSentiment = 'positive';
-              } else if (overallSentiment.includes('negative')) {
+              } else if (overallSentiment.includes('negative') || overallSentiment === 'negative') {
                 dominantSentiment = 'negative';
               }
+              
+              console.log(`Determined dominant sentiment: ${dominantSentiment} from overall: ${overallSentiment}`);
               
               // Apply sentiment distribution
               neutralArticles.forEach((article, idx) => {
@@ -448,8 +451,10 @@ const Analysis = ({ selectedStock }) => {
                 if (idx < dominantCount) {
                   // Assign the dominant sentiment to a portion of articles based on confidence
                   formattedNews[newsIndex].sentiment = dominantSentiment;
+                  console.log(`Setting article ${newsIndex} sentiment to ${dominantSentiment}`);
+                } else {
+                  console.log(`Keeping article ${newsIndex} as neutral`);
                 }
-                // All remaining articles stay neutral - don't artificially create opposite sentiment
               });
               
               // Log final distribution for debugging
