@@ -320,8 +320,34 @@ const Analysis = ({ selectedStock }) => {
                 }
               });
             } else if (response.data.recentNews) {
-              // If no analyzed articles but we have news, set a fallback of 1 neutral for each news article
-              neutralCount = response.data.recentNews.length;
+              // If no analyzedArticles but we have news and overall sentiment, use the LLM's overall sentiment
+              const newsCount = response.data.recentNews.length;
+              
+              // If we have overall sentiment from the LLM, use it to distribute articles
+              if (sentimentData.sentiment) {
+                const overallSentiment = sentimentData.sentiment.toLowerCase();
+                const confidence = sentimentData.confidence || 0.5;
+                
+                console.log(`Using LLM's overall sentiment: ${overallSentiment} with confidence ${confidence}`);
+                
+                // Calculate how many articles should get the main sentiment based on confidence
+                const mainSentimentCount = Math.round(newsCount * confidence);
+                const remainingCount = newsCount - mainSentimentCount;
+                
+                // Distribute articles according to overall sentiment and confidence
+                if (overallSentiment.includes('positive')) {
+                  positiveCount = mainSentimentCount;
+                  neutralCount = remainingCount;
+                } else if (overallSentiment.includes('negative')) {
+                  negativeCount = mainSentimentCount;
+                  neutralCount = remainingCount;
+                } else {
+                  neutralCount = newsCount;
+                }
+              } else {
+                // If no sentiment analysis at all, mark all as neutral
+                neutralCount = newsCount;
+              }
             }
             
             console.log(`Calculated sentiment counts - Positive: ${positiveCount}, Neutral: ${neutralCount}, Negative: ${negativeCount}`);
