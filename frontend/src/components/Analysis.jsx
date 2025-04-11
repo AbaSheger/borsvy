@@ -294,6 +294,8 @@ const Analysis = ({ selectedStock }) => {
           let sentimentData = null;
           if (response.data.newsSentiment) {
             console.log('Sentiment data received:', response.data.newsSentiment);
+            // Assign the sentiment data to the variable
+            sentimentData = response.data.newsSentiment;
             
             // Initialize sentiment counts as 0
             let positiveCount = 0;
