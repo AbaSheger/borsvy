@@ -56,7 +56,7 @@ public class LLMAnalysisService implements NewsAnalysisService {
     }
     
     public Map<String, Object> generateAnalysis(String symbol) {
-        log.debug("Starting analysis for symbol: {}", symbol);
+        log.info("Starting analysis for symbol: {}", symbol);
         
         try {
             // Get stock data
@@ -71,59 +71,55 @@ public class LLMAnalysisService implements NewsAnalysisService {
             
             // Add technical indicator data to the stock for backward compatibility
             if (technicalData.containsKey("rsi")) {
-                stock.setRsi(((Number) technicalData.get("rsi")).doubleValue());
+                stock.setRsi(Double.parseDouble(technicalData.get("rsi").toString()));
             }
             if (technicalData.containsKey("sma20")) {
-                stock.setSma20(((Number) technicalData.get("sma20")).doubleValue());
+                stock.setSma20(Double.parseDouble(technicalData.get("sma20").toString()));
             }
             if (technicalData.containsKey("sma50")) {
-                stock.setSma50(((Number) technicalData.get("sma50")).doubleValue());
+                stock.setSma50(Double.parseDouble(technicalData.get("sma50").toString()));
+            }
+            if (technicalData.containsKey("macd")) {
+                Map<String, Object> macdData = (Map<String, Object>) technicalData.get("macd");
+                if (macdData != null && macdData.containsKey("macd")) {
+                    stock.setMacd(Double.parseDouble(macdData.get("macd").toString()));
+                }
             }
             
             log.info("Analyzing {} - Price: ${}, Change: {}%, Volume: {}", 
                 symbol, stock.getPrice(), stock.getChangePercent(), stock.getVolume());
-                
-            // Try using Groq API if configured
-            String sentiment;
-            double confidence;
             
-            if (!apiKey.equals("fallback")) {
-                try {
-                    // Try using the API
-                    log.debug("Attempting to use Groq API for analysis");
-                    Map<String, Object> apiResult = callGroqApi(stock);
-                    sentiment = (String) apiResult.get("sentiment");
-                    confidence = (Double) apiResult.get("confidence");
-                    log.info("Successfully got sentiment from Groq API: {} with confidence {}", sentiment, confidence);
-                } catch (Exception e) {
-                    // Log the error but continue with local analysis
-                    log.warn("Groq API call failed: {}. Using local analysis instead.", e.getMessage());
-                    sentiment = determineLocalSentiment(stock);
-                    confidence = calculateDynamicConfidence(stock, sentiment);
-                }
-            } else {
-                // No API key, use local analysis
-                log.debug("No Groq API key configured, using local sentiment analysis");
-                sentiment = determineLocalSentiment(stock);
-                confidence = calculateDynamicConfidence(stock, sentiment);
+            // Create prompt for the LLM
+            String prompt = createGroqPrompt(stock);
+            
+            // Call Groq API
+            Map<String, Object> response = callGroqApi(prompt);
+            
+            if (response == null || response.isEmpty()) {
+                log.error("Failed to get response from Groq API");
+                throw new RuntimeException("Failed to get response from Groq API");
             }
             
-            // Generate detailed analysis text
-            String analysis = generateAnalysisText(stock, sentiment, confidence);
+            // Extract sentiment and confidence from the response
+            Map<String, Object> sentimentData = extractSentimentFromText((String) response.get("content"));
+            String sentiment = (String) sentimentData.get("sentiment");
+            double confidence = (double) sentimentData.get("confidence");
             
-            // Create response
-            Map<String, Object> responseMap = new HashMap<>();
-            responseMap.put("sentiment", sentiment.toLowerCase());
-            responseMap.put("confidence", confidence);
-            responseMap.put("analysis", analysis);
+            // Generate analysis text
+            String analysisText = generateAnalysisText(stock, sentiment, confidence);
             
-            log.info("Analysis for {} complete: {} sentiment with {:.1f}% confidence", 
-                symbol, sentiment, confidence * 100);
+            // Combine all data
+            Map<String, Object> result = new HashMap<>();
+            result.put("sentiment", sentiment);
+            result.put("confidence", confidence);
+            result.put("analysis", analysisText);
+            result.put("technical", technicalData);
             
-            return responseMap;
+            log.info("Analysis completed for {} - Sentiment: {}, Confidence: {}", symbol, sentiment, confidence);
+            return result;
             
         } catch (Exception e) {
-            log.error("Error generating analysis for {}: {}", symbol, e.getMessage(), e);
+            log.error("Error generating analysis: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to generate analysis: " + e.getMessage());
         }
     }
@@ -209,20 +205,13 @@ public class LLMAnalysisService implements NewsAnalysisService {
     /**
      * Calls the Groq API to get sentiment analysis
      */
-    private Map<String, Object> callGroqApi(Stock stock) {
+    private Map<String, Object> callGroqApi(String prompt) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Bearer " + apiKey);
             
-            // Create a proper prompt for the model
-            String prompt = createGroqPrompt(stock);
-            
-            // Log the actual prompt for debugging
-            log.info("Using prompt for Groq API: {}", prompt);
-            log.info("Using model: {} with API URL: {}", modelId, GROQ_API_URL);
-            
-            // Create the message structure that Groq expects
+            // Create the message structure for Groq
             Map<String, Object> message = new HashMap<>();
             message.put("role", "user");
             message.put("content", prompt);
@@ -234,8 +223,8 @@ public class LLMAnalysisService implements NewsAnalysisService {
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", modelId);
             requestBody.put("messages", messages);
-            requestBody.put("temperature", 0.2); // Low temperature for more consistent results
-            requestBody.put("max_tokens", 250); // Limit response size
+            requestBody.put("temperature", 0.2);
+            requestBody.put("max_tokens", 250);
             
             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
             
@@ -254,11 +243,11 @@ public class LLMAnalysisService implements NewsAnalysisService {
             log.info("Received Groq API response with status code: {}", response.getStatusCode());
             try {
                 log.debug("Full response body: {}", objectMapper.writeValueAsString(responseBody));
-            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-                log.warn("Could not serialize response body for logging: {}", e.getMessage());
+            } catch (Exception e) {
+                log.warn("Could not log response body: {}", e.getMessage());
             }
             
-            // Extract sentiment and confidence from the response using Groq's structure
+            // Extract the content from the response
             List<Map<String, Object>> choices = (List<Map<String, Object>>) responseBody.get("choices");
             if (choices != null && !choices.isEmpty()) {
                 Map<String, Object> choice = choices.get(0);
@@ -266,33 +255,16 @@ public class LLMAnalysisService implements NewsAnalysisService {
                 
                 if (messageResponse != null && messageResponse.containsKey("content")) {
                     String content = (String) messageResponse.get("content");
-                    log.info("Successfully extracted content from Groq API: [{}]", content);
-                    
-                    // Parse the content looking for sentiment and confidence
-                    Map<String, Object> sentimentResult = extractSentimentFromText(content);
-                    
-                    // If we successfully parsed the sentiment and confidence, return it
-                    if (sentimentResult.get("sentiment") != null && sentimentResult.get("confidence") != null) {
-                        log.info("Successfully extracted sentiment: {} with confidence {}", 
-                                sentimentResult.get("sentiment"), sentimentResult.get("confidence"));
-                        return sentimentResult;
-                    }
+                    return Map.of("content", content);
                 }
             }
             
-            // If we couldn't parse the response properly, log it and use fallback
-            log.warn("Could not extract sentiment from Groq API response, using local analysis");
-            String sentiment = determineLocalSentiment(stock);
-            double confidence = calculateDynamicConfidence(stock, sentiment);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("sentiment", sentiment);
-            result.put("confidence", confidence);
-            return result;
+            log.error("Could not extract content from Groq API response");
+            return null;
             
         } catch (Exception e) {
-            log.error("Error calling Groq API: {}", e.getMessage());
-            throw e;
+            log.error("Error calling Groq API: {}", e.getMessage(), e);
+            return null;
         }
     }
     
@@ -381,38 +353,52 @@ public class LLMAnalysisService implements NewsAnalysisService {
         result.put("confidence", confidence);
         
         try {
+            // Convert text to uppercase for case-insensitive matching
+            String upperText = text.toUpperCase();
+            
             // Look for sentiment pattern
-            if (text.contains("SENTIMENT:") && text.contains("CONFIDENCE:")) {
+            if (upperText.contains("SENTIMENT:") && upperText.contains("CONFIDENCE:")) {
                 // Extract sentiment
-                int sentimentStart = text.indexOf("SENTIMENT:") + 10;
-                int sentimentEnd = text.indexOf(" ", sentimentStart);
+                int sentimentStart = upperText.indexOf("SENTIMENT:") + 10;
+                int sentimentEnd = upperText.indexOf(" ", sentimentStart);
                 if (sentimentEnd == -1) {
                     // Try looking for newline if space not found
-                    sentimentEnd = text.indexOf("\n", sentimentStart);
+                    sentimentEnd = upperText.indexOf("\n", sentimentStart);
                 }
                 
                 if (sentimentEnd != -1) {
-                    sentiment = text.substring(sentimentStart, sentimentEnd).trim();
-                    result.put("sentiment", sentiment);
+                    String extractedSentiment = upperText.substring(sentimentStart, sentimentEnd).trim();
+                    // Validate the sentiment is one of our expected values
+                    if (extractedSentiment.equals("POSITIVE") || 
+                        extractedSentiment.equals("NEGATIVE") || 
+                        extractedSentiment.equals("NEUTRAL")) {
+                        sentiment = extractedSentiment;
+                        result.put("sentiment", sentiment);
+                    } else {
+                        log.warn("Invalid sentiment value extracted: {}", extractedSentiment);
+                    }
                 }
                 
                 // Extract confidence
-                int confidenceStart = text.indexOf("CONFIDENCE:") + 11;
-                int confidenceEnd = text.indexOf(" ", confidenceStart);
+                int confidenceStart = upperText.indexOf("CONFIDENCE:") + 11;
+                int confidenceEnd = upperText.indexOf(" ", confidenceStart);
                 if (confidenceEnd == -1) {
                     // Try looking for newline if space not found
-                    confidenceEnd = text.indexOf("\n", confidenceStart);
+                    confidenceEnd = upperText.indexOf("\n", confidenceStart);
                 }
                 
                 if (confidenceEnd == -1) {
                     // If still not found, take rest of string
-                    confidenceEnd = text.length();
+                    confidenceEnd = upperText.length();
                 }
                 
                 if (confidenceEnd != -1) {
-                    String confidenceStr = text.substring(confidenceStart, confidenceEnd).trim();
+                    String confidenceStr = upperText.substring(confidenceStart, confidenceEnd).trim();
                     try {
                         confidence = Double.parseDouble(confidenceStr);
+                        // Validate confidence is between 0 and 1
+                        if (confidence < 0) confidence = 0;
+                        if (confidence > 1) confidence = 1;
                         result.put("confidence", confidence);
                     } catch (NumberFormatException e) {
                         log.warn("Could not parse confidence value: {}", confidenceStr);
@@ -420,10 +406,10 @@ public class LLMAnalysisService implements NewsAnalysisService {
                 }
             } else {
                 // Simple sentiment extraction if format doesn't match
-                if (text.toLowerCase().contains("positive")) {
+                if (upperText.contains("POSITIVE")) {
                     sentiment = "POSITIVE";
                     confidence = 0.7;
-                } else if (text.toLowerCase().contains("negative")) {
+                } else if (upperText.contains("NEGATIVE")) {
                     sentiment = "NEGATIVE";
                     confidence = 0.7;
                 }
@@ -431,8 +417,10 @@ public class LLMAnalysisService implements NewsAnalysisService {
                 result.put("sentiment", sentiment);
                 result.put("confidence", confidence);
             }
+            
+            log.debug("Extracted sentiment: {} with confidence: {}", sentiment, confidence);
         } catch (Exception e) {
-            log.warn("Error extracting sentiment from text: {}", e.getMessage());
+            log.error("Error extracting sentiment from text: {}", e.getMessage());
         }
         
         return result;
@@ -571,117 +559,48 @@ public class LLMAnalysisService implements NewsAnalysisService {
      * @return A map containing sentiment analysis results
      */
     public Map<String, Object> analyzeNewsSentiment(String symbol, List<com.borsvy.model.NewsArticle> newsArticles) {
-        log.info("Analyzing news sentiment for {} with {} articles", symbol, newsArticles.size());
-        log.info("API Key status: {}", apiKey.equals("fallback") ? "Using fallback (no API key found)" : "API key found");
-        Map<String, Object> result = new HashMap<>();
+        log.info("Starting news sentiment analysis for symbol: {}", symbol);
         
+        if (newsArticles == null || newsArticles.isEmpty()) {
+            log.warn("No news articles provided for sentiment analysis");
+            return Map.of(
+                "sentiment", "NEUTRAL",
+                "confidence", 0.5,
+                "summary", "No news articles available for analysis"
+            );
+        }
+
         try {
-            if (newsArticles.isEmpty()) {
-                log.warn("No news articles provided for sentiment analysis");
-                result.put("sentiment", "neutral");
-                result.put("confidence", 0.5);
-                result.put("error", "No news articles available");
-                return result;
-            }
-            
-            // Create a proper prompt for the LLM
+            // Create a prompt for the LLM
             String prompt = createNewsSentimentPrompt(symbol, newsArticles);
             
-            // Try using Groq API if configured
-            if (!apiKey.equals("fallback")) {
-                log.debug("Attempting to use Groq API with model: {}", modelId);
-                try {
-                    HttpHeaders headers = new HttpHeaders();
-                    headers.setContentType(MediaType.APPLICATION_JSON);
-                    headers.set("Authorization", "Bearer " + apiKey);
-                    
-                    // Create the message structure for Groq
-                    Map<String, Object> message = new HashMap<>();
-                    message.put("role", "user");
-                    message.put("content", prompt);
-                    
-                    List<Map<String, Object>> messages = new java.util.ArrayList<>();
-                    messages.add(message);
-                    
-                    // Create the full request
-                    Map<String, Object> requestBody = new HashMap<>();
-                    requestBody.put("model", modelId);
-                    requestBody.put("messages", messages);
-                    requestBody.put("temperature", 0.2);
-                    requestBody.put("max_tokens", 250);
-                    
-                    HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
-                    
-                    log.debug("Sending news sentiment analysis request to Groq API");
-                    ResponseEntity<Map> response = restTemplate.exchange(
-                        GROQ_API_URL,
-                        HttpMethod.POST,
-                        requestEntity,
-                        Map.class
-                    );
-                    
-                    // Process the response
-                    Map<String, Object> responseBody = response.getBody();
-                    
-                    // Extract sentiment from the response
-                    List<Map<String, Object>> choices = (List<Map<String, Object>>) responseBody.get("choices");
-                    if (choices != null && !choices.isEmpty()) {
-                        Map<String, Object> choice = choices.get(0);
-                        Map<String, Object> messageResponse = (Map<String, Object>) choice.get("message");
-                        
-                        if (messageResponse != null && messageResponse.containsKey("content")) {
-                            String content = (String) messageResponse.get("content");
-                            log.debug("LLM response for news sentiment: {}", content);
-                            
-                            // Parse the sentiment from the response
-                            Map<String, Object> sentimentResult = extractSentimentFromText(content);
-                            
-                            String sentiment = (String) sentimentResult.get("sentiment");
-                            double confidence = (Double) sentimentResult.get("confidence");
-                            
-                            // Create a more detailed response
-                            result.put("sentiment", sentiment.toLowerCase());
-                            result.put("confidence", confidence);
-                            result.put("analysis", generateNewsSentimentSummary(symbol, newsArticles, sentiment, confidence));
-                            
-                            // Add article breakdown if available
-                            if (content.contains("ARTICLE BREAKDOWN:")) {
-                                String breakdown = extractArticleBreakdown(content);
-                                if (breakdown != null) {
-                                    result.put("articleBreakdown", breakdown);
-                                }
-                            }
-                            
-                            log.info("Successfully analyzed news sentiment for {}: {} with {}% confidence", 
-                                    symbol, sentiment, String.format("%.1f", confidence * 100));
-                            
-                            return result;
-                        }
-                    }
-                    
-                    log.warn("Could not extract sentiment from Groq API response");
-                } catch (Exception e) {
-                    log.error("Error analyzing news sentiment with Groq API: {}", e.getMessage());
-                }
+            // Call Groq API
+            Map<String, Object> response = callGroqApi(prompt);
+            
+            if (response == null || response.isEmpty()) {
+                log.error("Failed to get response from Groq API");
+                throw new RuntimeException("Failed to get response from Groq API");
             }
+
+            // Extract sentiment and confidence from the response
+            Map<String, Object> sentimentData = extractSentimentFromText((String) response.get("content"));
+            String sentiment = (String) sentimentData.get("sentiment");
+            double confidence = (double) sentimentData.get("confidence");
             
-            // Fallback to simple sentiment analysis
-            log.warn("Falling back to simple news sentiment analysis");
-            String sentiment = calculateSimpleNewsSentiment(newsArticles);
-            double confidence = 0.6; // Moderate confidence for the simple approach
+            // Generate a summary of the analysis
+            String summary = generateNewsSentimentSummary(symbol, newsArticles, sentiment, confidence);
             
-            result.put("sentiment", sentiment.toLowerCase());
-            result.put("confidence", confidence);
-            result.put("analysis", generateNewsSentimentSummary(symbol, newsArticles, sentiment, confidence));
+            log.info("News sentiment analysis completed - Sentiment: {}, Confidence: {}", sentiment, confidence);
             
-            return result;
+            return Map.of(
+                "sentiment", sentiment,
+                "confidence", confidence,
+                "summary", summary
+            );
             
         } catch (Exception e) {
-            log.error("Error analyzing news sentiment: {}", e.getMessage());
-            result.put("sentiment", "neutral");
-            result.put("confidence", 0.5);
-            result.put("error", "Failed to analyze news sentiment: " + e.getMessage());
-            return result;
+            log.error("Error in news sentiment analysis: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to analyze news sentiment: " + e.getMessage());
         }
     }
     
@@ -719,95 +638,6 @@ public class LLMAnalysisService implements NewsAnalysisService {
         prompt.append("First provide the SENTIMENT and CONFIDENCE, then the article breakdown.");
         
         return prompt.toString();
-    }
-    
-    /**
-     * Extract article breakdown analysis from LLM response
-     */
-    private String extractArticleBreakdown(String content) {
-        try {
-            int breakdownStart = content.indexOf("ARTICLE BREAKDOWN:");
-            if (breakdownStart != -1) {
-                return content.substring(breakdownStart + "ARTICLE BREAKDOWN:".length()).trim();
-            }
-        } catch (Exception e) {
-            log.warn("Error extracting article breakdown: {}", e.getMessage());
-        }
-        return null;
-    }
-    
-    /**
-     * Simple keyword-based sentiment analysis for news articles (fallback method)
-     */
-    private String calculateSimpleNewsSentiment(List<com.borsvy.model.NewsArticle> newsArticles) {
-        double positiveScore = 0;
-        double negativeScore = 0;
-        
-        // Keywords that typically indicate positive/negative sentiment in financial news
-        String[] positiveWords = {"surge", "gain", "rise", "jump", "high", "growth", "profit", "up", "boost", 
-                                "soar", "bullish", "beat", "exceed", "positive", "strong", "success"};
-        
-        // Expanded list of negative keywords with more financial terms
-        String[] negativeWords = {"drop", "fall", "decline", "plunge", "low", "down", "loss", "miss", "weak", 
-                                "bearish", "sink", "crash", "tumble", "negative", "failed", "concern", "worry",
-                                "cut", "slump", "layoff", "bankruptcy", "debt", "warn", "struggle", "crisis",
-                                "scandal", "investigation", "lawsuit", "worse", "disappointing", "recall",
-                                "halt", "delay", "risk", "danger", "threat", "dispute", "penalty", "fine"};
-                                
-        // Strong negative words that should be weighted more heavily
-        String[] strongNegativeWords = {"crash", "plunge", "bankruptcy", "crisis", "scandal", "lawsuit", "tumble", "collapse"};
-        
-        // Count occurrences of positive and negative keywords in each article
-        for (com.borsvy.model.NewsArticle article : newsArticles) {
-            String title = article.getTitle().toLowerCase();
-            double articlePositive = 0;
-            double articleNegative = 0;
-            
-            // Check for positive words
-            for (String word : positiveWords) {
-                if (title.contains(word.toLowerCase())) {
-                    articlePositive++;
-                }
-            }
-            
-            // Check for negative words with stronger weight for certain terms
-            for (String word : negativeWords) {
-                if (title.contains(word.toLowerCase())) {
-                    // Check if this is a strong negative word
-                    boolean isStrongNegative = false;
-                    for (String strongWord : strongNegativeWords) {
-                        if (word.equals(strongWord)) {
-                            isStrongNegative = true;
-                            break;
-                        }
-                    }
-                    
-                    // Apply higher weight for strong negative words
-                    articleNegative += isStrongNegative ? 1.5 : 1.0;
-                }
-            }
-            
-            // Add scores from this article
-            positiveScore += articlePositive;
-            negativeScore += articleNegative;
-            
-            // If an article has more negative than positive words, consider it more important
-            if (articleNegative > articlePositive) {
-                negativeScore += 0.5; // Add a bonus for articles with clear negative sentiment
-            }
-        }
-        
-        // Log the scores for debugging
-        log.debug("News sentiment analysis scores - Positive: {}, Negative: {}", positiveScore, negativeScore);
-        
-        // Determine sentiment based on keyword counts with lower threshold for negative
-        if (positiveScore > negativeScore + 1.5) {
-            return "POSITIVE";
-        } else if (negativeScore > positiveScore) { // Reduced threshold for negative sentiment
-            return "NEGATIVE";
-        } else {
-            return "NEUTRAL";
-        }
     }
     
     /**
