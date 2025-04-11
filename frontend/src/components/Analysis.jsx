@@ -448,14 +448,8 @@ const Analysis = ({ selectedStock }) => {
                 if (idx < dominantCount) {
                   // Assign the dominant sentiment to a portion of articles based on confidence
                   formattedNews[newsIndex].sentiment = dominantSentiment;
-                } else if (dominantSentiment !== 'neutral') {
-                  // For remaining articles, distribute between opposite and neutral
-                  if (idx % 3 === 0) {
-                    // Every third remaining article gets the opposite sentiment for balance
-                    formattedNews[newsIndex].sentiment = dominantSentiment === 'positive' ? 'negative' : 'positive';
-                  }
-                  // Others remain neutral
                 }
+                // All remaining articles stay neutral - don't artificially create opposite sentiment
               });
               
               // Log final distribution for debugging
