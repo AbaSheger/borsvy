@@ -43,6 +43,7 @@ public class StockService {
     private final SerpApiClient serpApiClient;
     private final PolygonClient polygonClient;
     private final RapidApiClient rapidApiClient;
+    private final NewsAnalysisService newsAnalysisService; // Changed to interface instead of implementation
     private final Map<String, CachedStock> stockCache = new ConcurrentHashMap<>();
     private final Map<String, CachedStockDetails> detailsCache = new ConcurrentHashMap<>();
     private List<Stock> cachedPopularStocks;
@@ -57,12 +58,14 @@ public class StockService {
                        FinnhubClient finnhubClient, 
                        SerpApiClient serpApiClient,
                        PolygonClient polygonClient,
-                       RapidApiClient rapidApiClient) {
+                       RapidApiClient rapidApiClient,
+                       NewsAnalysisService newsAnalysisService) {
         this.stockRepository = stockRepository;
         this.finnhubClient = finnhubClient;
         this.serpApiClient = serpApiClient;
         this.polygonClient = polygonClient;
         this.rapidApiClient = rapidApiClient;
+        this.newsAnalysisService = newsAnalysisService;
     }
 
     @Retryable(
@@ -339,57 +342,33 @@ public class StockService {
         try {
             log.info("Getting news sentiment for symbol: {}", symbol);
             
-            // Try SerpApi first
-            boolean serpApiSuccess = false;
-            try {
-                log.info("Attempting to use SerpAPI for sentiment analysis...");
-                Map<String, Object> serpApiSentiment = serpApiClient.getNewsSentiment(symbol);
-                
-                // Better check for API limit errors
-                if (serpApiSentiment != null) {
-                    if (!serpApiSentiment.containsKey("error") || 
-                        (serpApiSentiment.containsKey("error") && 
-                         !serpApiSentiment.get("error").toString().toLowerCase().contains("limit"))) {
-                        
-                        log.info("Successfully got sentiment from SerpApi");
-                        serpApiSuccess = true;
-                        return serpApiSentiment;
-                    } else {
-                        log.warn("SerpAPI limit reached or error encountered: {}. Falling back to RapidApi", 
-                                serpApiSentiment.getOrDefault("error", "Unknown error"));
-                    }
-                } else {
-                    log.warn("SerpAPI returned null result. Falling back to RapidApi");
-                }
-            } catch (Exception e) {
-                log.warn("Error getting sentiment from SerpApi: {}. Falling back to RapidApi", e.getMessage());
+            // First get actual news articles
+            List<NewsArticle> newsArticles = getStockNews(symbol, 15); // Get up to 15 articles for analysis
+            
+            if (newsArticles.isEmpty()) {
+                log.warn("No news articles found for sentiment analysis");
+                Map<String, Object> noNewsResult = new HashMap<>();
+                noNewsResult.put("sentiment", "neutral");
+                noNewsResult.put("confidence", 0.5);
+                noNewsResult.put("error", "No news articles available for sentiment analysis");
+                return noNewsResult;
             }
             
-            // Fallback to RapidApi if SerpApi failed
-            if (!serpApiSuccess) {
-                try {
-                    log.info("Attempting to use RapidAPI for sentiment analysis (fallback)...");
-                    Map<String, Object> rapidApiSentiment = rapidApiClient.getNewsSentiment(symbol);
-                    if (rapidApiSentiment != null && !rapidApiSentiment.containsKey("error")) {
-                        log.info("Successfully got sentiment from RapidApi (fallback)");
-                        return rapidApiSentiment;
-                    } else {
-                        log.warn("RapidAPI sentiment analysis failed: {}", 
-                                rapidApiSentiment != null ? rapidApiSentiment.getOrDefault("error", "Unknown error") : "Null response");
-                    }
-                } catch (Exception e) {
-                    log.error("Error getting sentiment from RapidApi (fallback): {}", e.getMessage());
-                }
-            }
+            log.info("Found {} news articles for sentiment analysis", newsArticles.size());
             
-            // If both APIs fail, generate varied sentiment based on stock data
-            log.warn("Both sentiment APIs failed, generating market-based sentiment");
-            return generateMarketBasedNewsSentiment(symbol);
+            // Use LLM service to analyze sentiment based on actual news articles
+            Map<String, Object> sentimentResults = newsAnalysisService.analyzeNewsSentiment(symbol, newsArticles);
+            log.info("LLM analysis complete: sentiment={}, confidence={}", 
+                    sentimentResults.get("sentiment"), sentimentResults.get("confidence"));
+            
+            return sentimentResults;
             
         } catch (Exception e) {
-            log.error("Error in getNewsSentiment: {}", e.getMessage());
+            log.error("Error in getNewsSentiment: {}", e.getMessage(), e);
             Map<String, Object> errorSentiment = new HashMap<>();
             errorSentiment.put("error", "Failed to analyze sentiment");
+            errorSentiment.put("sentiment", "neutral");
+            errorSentiment.put("confidence", 0.5);
             return errorSentiment;
         }
     }

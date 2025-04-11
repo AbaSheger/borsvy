@@ -22,13 +22,14 @@ import java.util.Comparator;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 
 @Slf4j
 @Service
-public class LLMAnalysisService {
+public class LLMAnalysisService implements NewsAnalysisService {
 
     private final RestTemplate restTemplate;
-    private final StockService stockService;
+    private StockService stockService; // Changed from final to allow setter injection
     private final ObjectMapper objectMapper;
     private final TechnicalIndicatorService technicalIndicatorService;
     private final PolygonClient polygonClient;
@@ -42,13 +43,15 @@ public class LLMAnalysisService {
     private String modelId;
     
     @Autowired
-    public LLMAnalysisService(RestTemplate restTemplate, StockService stockService, ObjectMapper objectMapper,
-                             TechnicalIndicatorService technicalIndicatorService, PolygonClient polygonClient) {
+    public LLMAnalysisService(RestTemplate restTemplate, ObjectMapper objectMapper,
+                             TechnicalIndicatorService technicalIndicatorService, 
+                             PolygonClient polygonClient, 
+                             @Lazy StockService stockService) {  // Added @Lazy annotation here
         this.restTemplate = restTemplate;
-        this.stockService = stockService;
         this.objectMapper = objectMapper;
         this.technicalIndicatorService = technicalIndicatorService;
         this.polygonClient = polygonClient;
+        this.stockService = stockService;
         log.info("LLMAnalysisService initialized - using Groq API: {}", apiKey != null && !apiKey.equals("fallback"));
     }
     
@@ -559,5 +562,241 @@ public class LLMAnalysisService {
         }
         
         return analysis.toString();
+    }
+    
+    /**
+     * Analyzes sentiment of news articles using LLM
+     * @param symbol The stock symbol
+     * @param newsArticles List of news articles to analyze
+     * @return A map containing sentiment analysis results
+     */
+    public Map<String, Object> analyzeNewsSentiment(String symbol, List<com.borsvy.model.NewsArticle> newsArticles) {
+        log.info("Analyzing news sentiment for {} with {} articles", symbol, newsArticles.size());
+        Map<String, Object> result = new HashMap<>();
+        
+        try {
+            if (newsArticles.isEmpty()) {
+                log.warn("No news articles provided for sentiment analysis");
+                result.put("sentiment", "neutral");
+                result.put("confidence", 0.5);
+                result.put("error", "No news articles available");
+                return result;
+            }
+            
+            // Create a proper prompt for the LLM
+            String prompt = createNewsSentimentPrompt(symbol, newsArticles);
+            
+            // Try using Groq API if configured
+            if (!apiKey.equals("fallback")) {
+                try {
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setContentType(MediaType.APPLICATION_JSON);
+                    headers.set("Authorization", "Bearer " + apiKey);
+                    
+                    // Create the message structure for Groq
+                    Map<String, Object> message = new HashMap<>();
+                    message.put("role", "user");
+                    message.put("content", prompt);
+                    
+                    List<Map<String, Object>> messages = new java.util.ArrayList<>();
+                    messages.add(message);
+                    
+                    // Create the full request
+                    Map<String, Object> requestBody = new HashMap<>();
+                    requestBody.put("model", modelId);
+                    requestBody.put("messages", messages);
+                    requestBody.put("temperature", 0.2);
+                    requestBody.put("max_tokens", 250);
+                    
+                    HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+                    
+                    log.debug("Sending news sentiment analysis request to Groq API");
+                    ResponseEntity<Map> response = restTemplate.exchange(
+                        GROQ_API_URL,
+                        HttpMethod.POST,
+                        requestEntity,
+                        Map.class
+                    );
+                    
+                    // Process the response
+                    Map<String, Object> responseBody = response.getBody();
+                    
+                    // Extract sentiment from the response
+                    List<Map<String, Object>> choices = (List<Map<String, Object>>) responseBody.get("choices");
+                    if (choices != null && !choices.isEmpty()) {
+                        Map<String, Object> choice = choices.get(0);
+                        Map<String, Object> messageResponse = (Map<String, Object>) choice.get("message");
+                        
+                        if (messageResponse != null && messageResponse.containsKey("content")) {
+                            String content = (String) messageResponse.get("content");
+                            log.debug("LLM response for news sentiment: {}", content);
+                            
+                            // Parse the sentiment from the response
+                            Map<String, Object> sentimentResult = extractSentimentFromText(content);
+                            
+                            String sentiment = (String) sentimentResult.get("sentiment");
+                            double confidence = (Double) sentimentResult.get("confidence");
+                            
+                            // Create a more detailed response
+                            result.put("sentiment", sentiment.toLowerCase());
+                            result.put("confidence", confidence);
+                            result.put("analysis", generateNewsSentimentSummary(symbol, newsArticles, sentiment, confidence));
+                            
+                            // Add article breakdown if available
+                            if (content.contains("ARTICLE BREAKDOWN:")) {
+                                String breakdown = extractArticleBreakdown(content);
+                                if (breakdown != null) {
+                                    result.put("articleBreakdown", breakdown);
+                                }
+                            }
+                            
+                            log.info("Successfully analyzed news sentiment for {}: {} with {}% confidence", 
+                                    symbol, sentiment, String.format("%.1f", confidence * 100));
+                            
+                            return result;
+                        }
+                    }
+                    
+                    log.warn("Could not extract sentiment from Groq API response");
+                } catch (Exception e) {
+                    log.error("Error analyzing news sentiment with Groq API: {}", e.getMessage());
+                }
+            }
+            
+            // Fallback to simple sentiment analysis
+            log.warn("Falling back to simple news sentiment analysis");
+            String sentiment = calculateSimpleNewsSentiment(newsArticles);
+            double confidence = 0.6; // Moderate confidence for the simple approach
+            
+            result.put("sentiment", sentiment.toLowerCase());
+            result.put("confidence", confidence);
+            result.put("analysis", generateNewsSentimentSummary(symbol, newsArticles, sentiment, confidence));
+            
+            return result;
+            
+        } catch (Exception e) {
+            log.error("Error analyzing news sentiment: {}", e.getMessage());
+            result.put("sentiment", "neutral");
+            result.put("confidence", 0.5);
+            result.put("error", "Failed to analyze news sentiment: " + e.getMessage());
+            return result;
+        }
+    }
+    
+    /**
+     * Creates a prompt for the LLM to analyze news article sentiments
+     */
+    private String createNewsSentimentPrompt(String symbol, List<com.borsvy.model.NewsArticle> newsArticles) {
+        StringBuilder prompt = new StringBuilder();
+        
+        prompt.append("You are a financial news analyst specialized in sentiment analysis. ");
+        prompt.append("Analyze the sentiment in these news headlines about ").append(symbol).append(".\n\n");
+        
+        // The specific instruction with format requirements
+        prompt.append("IMPORTANT: Your response must follow this exact format:\n");
+        prompt.append("SENTIMENT:[SENTIMENT] CONFIDENCE:[CONFIDENCE]\n");
+        prompt.append("where [SENTIMENT] is exactly one of: POSITIVE, NEGATIVE, or NEUTRAL\n");
+        prompt.append("and [CONFIDENCE] is a number between 0 and 1 representing your confidence level.\n\n");
+        
+        prompt.append("Then include: ARTICLE BREAKDOWN: followed by a brief sentiment analysis of the most important headlines.\n\n");
+        
+        // List all headlines
+        prompt.append("==== NEWS HEADLINES ====\n");
+        int count = 1;
+        for (com.borsvy.model.NewsArticle article : newsArticles) {
+            prompt.append(count).append(". ").append(article.getTitle()).append(" [").append(article.getPublishedDate()).append("]\n");
+            count++;
+            if (count > 10) break; // Limit to 10 headlines
+        }
+        
+        prompt.append("\nBased on these headlines, determine if the overall news sentiment for ");
+        prompt.append(symbol).append(" is POSITIVE, NEGATIVE, or NEUTRAL. ");
+        prompt.append("Focus on how these headlines might impact stock price.\n\n");
+        prompt.append("First provide the SENTIMENT and CONFIDENCE, then the article breakdown.");
+        
+        return prompt.toString();
+    }
+    
+    /**
+     * Extract article breakdown analysis from LLM response
+     */
+    private String extractArticleBreakdown(String content) {
+        try {
+            int breakdownStart = content.indexOf("ARTICLE BREAKDOWN:");
+            if (breakdownStart != -1) {
+                return content.substring(breakdownStart + "ARTICLE BREAKDOWN:".length()).trim();
+            }
+        } catch (Exception e) {
+            log.warn("Error extracting article breakdown: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Simple keyword-based sentiment analysis for news articles (fallback method)
+     */
+    private String calculateSimpleNewsSentiment(List<com.borsvy.model.NewsArticle> newsArticles) {
+        int positiveScore = 0;
+        int negativeScore = 0;
+        
+        // Keywords that typically indicate positive/negative sentiment in financial news
+        String[] positiveWords = {"surge", "gain", "rise", "jump", "high", "growth", "profit", "up", "boost", 
+                                "soar", "bullish", "beat", "exceed", "positive", "strong", "success"};
+        
+        String[] negativeWords = {"drop", "fall", "decline", "plunge", "low", "down", "loss", "miss", "weak", 
+                                "bearish", "sink", "crash", "tumble", "negative", "failed", "concern"};
+        
+        // Count occurrences of positive and negative keywords
+        for (com.borsvy.model.NewsArticle article : newsArticles) {
+            String title = article.getTitle().toLowerCase();
+            
+            for (String word : positiveWords) {
+                if (title.contains(word.toLowerCase())) {
+                    positiveScore++;
+                }
+            }
+            
+            for (String word : negativeWords) {
+                if (title.contains(word.toLowerCase())) {
+                    negativeScore++;
+                }
+            }
+        }
+        
+        // Determine sentiment based on keyword counts
+        if (positiveScore > negativeScore + 2) {
+            return "POSITIVE";
+        } else if (negativeScore > positiveScore + 2) {
+            return "NEGATIVE";
+        } else {
+            return "NEUTRAL";
+        }
+    }
+    
+    /**
+     * Generate a summary analysis of news sentiment
+     */
+    private String generateNewsSentimentSummary(String symbol, List<com.borsvy.model.NewsArticle> newsArticles, 
+                                              String sentiment, double confidence) {
+        StringBuilder summary = new StringBuilder();
+        
+        summary.append("News Sentiment Analysis for ").append(symbol).append(":\n\n");
+        summary.append("Based on analysis of ").append(newsArticles.size()).append(" recent news articles, ");
+        summary.append("the overall sentiment is ").append(sentiment).append(" with ");
+        summary.append(String.format("%.1f", confidence * 100)).append("% confidence.\n\n");
+        
+        // Add some general observations based on the sentiment
+        if (sentiment.equals("POSITIVE")) {
+            summary.append("The headlines suggest generally positive developments for ").append(symbol);
+            summary.append(", which may have a favorable impact on the stock price.");
+        } else if (sentiment.equals("NEGATIVE")) {
+            summary.append("The headlines suggest concerning developments for ").append(symbol);
+            summary.append(", which may have a negative impact on the stock price.");
+        } else {
+            summary.append("The headlines show mixed or balanced news for ").append(symbol);
+            summary.append(", suggesting no clear directional impact on the stock price.");
+        }
+        
+        return summary.toString();
     }
 }
