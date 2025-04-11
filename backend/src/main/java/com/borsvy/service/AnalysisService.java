@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,12 @@ import com.borsvy.client.PolygonClient;
 import com.borsvy.model.StockPrice;
 import com.borsvy.model.NewsArticle;
 import java.util.concurrent.CompletableFuture;
+
+// Add TA4J imports
+import org.ta4j.core.*;
+import org.ta4j.core.indicators.RSIIndicator;
+import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 
 @Slf4j
 @Service
@@ -162,22 +169,33 @@ public class AnalysisService {
     private Map<String, Object> getTechnicalAnalysis(Stock stock) {
         Map<String, Object> analysis = new HashMap<>();
         try {
-            // Calculate technical indicators
-            double rsi = calculateRSI(stock);
-            double macd = calculateMACD(stock);
-            double sma20 = calculateSMA(stock, 20);
-            double sma50 = calculateSMA(stock, 50);
+            // Use the TechnicalIndicatorService to get the analysis
+            List<StockPrice> priceHistory = polygonClient.getHistoricalData(stock.getSymbol(), "1day");
+            if (priceHistory == null || priceHistory.isEmpty()) {
+                analysis.put("error", "No price history available");
+                return analysis;
+            }
+            
+            // Autowire the TechnicalIndicatorService
+            TechnicalIndicatorService technicalIndicatorService = new TechnicalIndicatorService();
+            
+            // Get the technical analysis using the service
+            Map<String, Object> technicalData = technicalIndicatorService.generateTechnicalAnalysis(priceHistory, stock.getSymbol());
+            
+            // Extract the required values
+            double rsiValue = (double) technicalData.getOrDefault("rsi", 50.0);
+            double sma20Value = (double) technicalData.getOrDefault("sma20", stock.getPrice());
+            double sma50Value = (double) technicalData.getOrDefault("sma50", stock.getPrice());
             
             // Determine trend
-            String trend = determineTrend(stock, sma20, sma50);
+            String trend = determineTrend(stock, sma20Value, sma50Value);
             
             // Generate technical signals
-            Map<String, String> signals = generateTechnicalSignals(rsi, macd, sma20, sma50, stock);
+            Map<String, String> signals = generateTechnicalSignals(rsiValue, stock.getPrice(), sma20Value, sma50Value, stock);
             
-            analysis.put("rsi", rsi);
-            analysis.put("macd", macd);
-            analysis.put("sma20", sma20);
-            analysis.put("sma50", sma50);
+            analysis.put("rsi", rsiValue);
+            analysis.put("sma20", sma20Value);
+            analysis.put("sma50", sma50Value);
             analysis.put("trend", trend);
             analysis.put("signals", signals);
             

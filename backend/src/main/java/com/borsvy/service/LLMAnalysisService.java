@@ -2,6 +2,8 @@ package com.borsvy.service;
 
 import com.borsvy.model.Stock;
 import com.borsvy.model.StockAnalysis;
+import com.borsvy.model.StockPrice;
+import com.borsvy.client.PolygonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -28,6 +30,8 @@ public class LLMAnalysisService {
     private final RestTemplate restTemplate;
     private final StockService stockService;
     private final ObjectMapper objectMapper;
+    private final TechnicalIndicatorService technicalIndicatorService;
+    private final PolygonClient polygonClient;
     
     private static final String GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
     
@@ -38,10 +42,13 @@ public class LLMAnalysisService {
     private String modelId;
     
     @Autowired
-    public LLMAnalysisService(RestTemplate restTemplate, StockService stockService, ObjectMapper objectMapper) {
+    public LLMAnalysisService(RestTemplate restTemplate, StockService stockService, ObjectMapper objectMapper,
+                             TechnicalIndicatorService technicalIndicatorService, PolygonClient polygonClient) {
         this.restTemplate = restTemplate;
         this.stockService = stockService;
         this.objectMapper = objectMapper;
+        this.technicalIndicatorService = technicalIndicatorService;
+        this.polygonClient = polygonClient;
         log.info("LLMAnalysisService initialized - using Groq API: {}", apiKey != null && !apiKey.equals("fallback"));
     }
     
@@ -52,6 +59,23 @@ public class LLMAnalysisService {
             // Get stock data
             Stock stock = stockService.getStockBySymbol(symbol)
                 .orElseThrow(() -> new RuntimeException("Stock not found"));
+            
+            // Get price history from the PolygonClient
+            List<StockPrice> priceHistory = polygonClient.getHistoricalData(symbol, "1day");
+            
+            // Calculate technical indicators
+            Map<String, Object> technicalData = technicalIndicatorService.generateTechnicalAnalysis(priceHistory, symbol);
+            
+            // Add technical indicator data to the stock for backward compatibility
+            if (technicalData.containsKey("rsi")) {
+                stock.setRsi(((Number) technicalData.get("rsi")).doubleValue());
+            }
+            if (technicalData.containsKey("sma20")) {
+                stock.setSma20(((Number) technicalData.get("sma20")).doubleValue());
+            }
+            if (technicalData.containsKey("sma50")) {
+                stock.setSma50(((Number) technicalData.get("sma50")).doubleValue());
+            }
             
             log.info("Analyzing {} - Price: ${}, Change: {}%, Volume: {}", 
                 symbol, stock.getPrice(), stock.getChangePercent(), stock.getVolume());

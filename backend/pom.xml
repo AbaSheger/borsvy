@@ -93,12 +93,18 @@
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
             <version>0.11.5</version>
-        </dependency>
-        <dependency>
+        </dependency>        <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
             <version>0.11.5</version>
             <scope>runtime</scope>
+        </dependency>
+        
+        <!-- TA4J Core for Technical Analysis -->
+        <dependency>
+            <groupId>org.ta4j</groupId>
+            <artifactId>ta4j-core</artifactId>
+            <version>0.15</version>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
