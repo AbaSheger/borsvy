@@ -211,20 +211,14 @@ public class LLMAnalysisService implements NewsAnalysisService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Bearer " + apiKey);
             
-            // Create the message structure for Groq
-            Map<String, Object> message = new HashMap<>();
-            message.put("role", "user");
-            message.put("content", prompt);
-            
-            List<Map<String, Object>> messages = new java.util.ArrayList<>();
-            messages.add(message);
-            
-            // Create the full request
+            // Create the request body
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", modelId);
-            requestBody.put("messages", messages);
-            requestBody.put("temperature", 0.2);
-            requestBody.put("max_tokens", 250);
+            requestBody.put("model", "llama-3.3-70b-versatile");
+            requestBody.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+            requestBody.put("temperature", 0.3); // Lower temperature for more consistent responses
+            requestBody.put("max_tokens", 1000);
+            requestBody.put("top_p", 0.9);
+            requestBody.put("stream", false);
             
             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
             
@@ -348,10 +342,6 @@ public class LLMAnalysisService implements NewsAnalysisService {
         String sentiment = "NEUTRAL";
         double confidence = 0.5;
         
-        // Default values in case extraction fails
-        result.put("sentiment", sentiment);
-        result.put("confidence", confidence);
-        
         try {
             // Convert text to uppercase for case-insensitive matching
             String upperText = text.toUpperCase();
@@ -373,7 +363,6 @@ public class LLMAnalysisService implements NewsAnalysisService {
                         extractedSentiment.equals("NEGATIVE") || 
                         extractedSentiment.equals("NEUTRAL")) {
                         sentiment = extractedSentiment;
-                        result.put("sentiment", sentiment);
                     } else {
                         log.warn("Invalid sentiment value extracted: {}", extractedSentiment);
                     }
@@ -381,46 +370,83 @@ public class LLMAnalysisService implements NewsAnalysisService {
                 
                 // Extract confidence
                 int confidenceStart = upperText.indexOf("CONFIDENCE:") + 11;
-                int confidenceEnd = upperText.indexOf(" ", confidenceStart);
+                int confidenceEnd = upperText.indexOf("\n", confidenceStart);
                 if (confidenceEnd == -1) {
-                    // Try looking for newline if space not found
-                    confidenceEnd = upperText.indexOf("\n", confidenceStart);
-                }
-                
-                if (confidenceEnd == -1) {
-                    // If still not found, take rest of string
-                    confidenceEnd = upperText.length();
+                    // If newline not found, try looking for space
+                    confidenceEnd = upperText.indexOf(" ", confidenceStart);
                 }
                 
                 if (confidenceEnd != -1) {
-                    String confidenceStr = upperText.substring(confidenceStart, confidenceEnd).trim();
                     try {
+                        String confidenceStr = upperText.substring(confidenceStart, confidenceEnd).trim();
                         confidence = Double.parseDouble(confidenceStr);
-                        // Validate confidence is between 0 and 1
-                        if (confidence < 0) confidence = 0;
-                        if (confidence > 1) confidence = 1;
-                        result.put("confidence", confidence);
+                        // Ensure confidence is between 0 and 1
+                        confidence = Math.max(0.0, Math.min(1.0, confidence));
                     } catch (NumberFormatException e) {
-                        log.warn("Could not parse confidence value: {}", confidenceStr);
+                        log.warn("Invalid confidence value extracted: {}", e.getMessage());
                     }
                 }
             } else {
-                // Simple sentiment extraction if format doesn't match
-                if (upperText.contains("POSITIVE")) {
-                    sentiment = "POSITIVE";
-                    confidence = 0.7;
-                } else if (upperText.contains("NEGATIVE")) {
-                    sentiment = "NEGATIVE";
-                    confidence = 0.7;
+                // Enhanced sentiment extraction if format doesn't match
+                // Look for sentiment indicators in the text
+                int positiveIndicators = 0;
+                int negativeIndicators = 0;
+                
+                // Positive indicators for financial news
+                if (upperText.contains("POSITIVE") || upperText.contains("BULLISH") || 
+                    upperText.contains("GAIN") || upperText.contains("RISE") || 
+                    upperText.contains("UP") || upperText.contains("STRONG") || 
+                    upperText.contains("BEAT") || upperText.contains("EXCEED") ||
+                    upperText.contains("PROFIT") || upperText.contains("GROWTH") ||
+                    upperText.contains("SURGE") || upperText.contains("SOAR") ||
+                    upperText.contains("INCREASE") || upperText.contains("IMPROVE") ||
+                    upperText.contains("SUCCESS") || upperText.contains("LEAD") ||
+                    upperText.contains("EXPAND") || upperText.contains("PARTNERSHIP")) {
+                    positiveIndicators++;
                 }
                 
-                result.put("sentiment", sentiment);
-                result.put("confidence", confidence);
+                // Negative indicators for financial news
+                if (upperText.contains("NEGATIVE") || upperText.contains("BEARISH") || 
+                    upperText.contains("DROP") || upperText.contains("FALL") || 
+                    upperText.contains("DOWN") || upperText.contains("WEAK") || 
+                    upperText.contains("MISS") || upperText.contains("BELOW") ||
+                    upperText.contains("LOSS") || upperText.contains("DECLINE") ||
+                    upperText.contains("PLUNGE") || upperText.contains("SLUMP") ||
+                    upperText.contains("DECREASE") || upperText.contains("DETERIORATE") ||
+                    upperText.contains("FAILURE") || upperText.contains("LAG") ||
+                    upperText.contains("CONTRACT") || upperText.contains("LAWSUIT") ||
+                    upperText.contains("INVESTIGATION") || upperText.contains("REGULATORY")) {
+                    negativeIndicators++;
+                }
+                
+                // Determine sentiment based on indicators
+                if (positiveIndicators > negativeIndicators) {
+                    sentiment = "POSITIVE";
+                    confidence = 0.7 + (positiveIndicators - negativeIndicators) * 0.05;
+                } else if (negativeIndicators > positiveIndicators) {
+                    sentiment = "NEGATIVE";
+                    confidence = 0.7 + (negativeIndicators - positiveIndicators) * 0.05;
+                } else if (positiveIndicators == 0 && negativeIndicators == 0) {
+                    // Only set to neutral if no indicators found
+                    sentiment = "NEUTRAL";
+                    confidence = 0.5;
+                } else {
+                    // Mixed signals, use the stronger signal
+                    sentiment = positiveIndicators > negativeIndicators ? "POSITIVE" : "NEGATIVE";
+                    confidence = 0.6;
+                }
             }
+            
+            // Always set both sentiment and confidence in the result
+            result.put("sentiment", sentiment);
+            result.put("confidence", confidence);
             
             log.debug("Extracted sentiment: {} with confidence: {}", sentiment, confidence);
         } catch (Exception e) {
             log.error("Error extracting sentiment from text: {}", e.getMessage());
+            // Set default values in case of error
+            result.put("sentiment", "NEUTRAL");
+            result.put("confidence", 0.5);
         }
         
         return result;
@@ -613,13 +639,22 @@ public class LLMAnalysisService implements NewsAnalysisService {
         prompt.append("You are a financial news analyst specialized in sentiment analysis. ");
         prompt.append("Analyze the sentiment in these news headlines about ").append(symbol).append(".\n\n");
         
+        // Clear instructions about sentiment classification
+        prompt.append("SENTIMENT GUIDELINES:\n");
+        prompt.append("POSITIVE: Headlines indicating growth, gains, profits, success, market leadership, positive earnings, new products/services, expansion, partnerships, or positive regulatory developments.\n");
+        prompt.append("NEGATIVE: Headlines indicating losses, declines, layoffs, regulatory issues, lawsuits, investigations, market share loss, product failures, or negative earnings.\n");
+        prompt.append("NEUTRAL: Headlines that are purely informational, announcements without clear positive/negative implications, or balanced news with both positive and negative aspects.\n\n");
+        
         // The specific instruction with format requirements
         prompt.append("IMPORTANT: Your response must follow this exact format:\n");
         prompt.append("SENTIMENT:[SENTIMENT] CONFIDENCE:[CONFIDENCE]\n");
         prompt.append("where [SENTIMENT] is exactly one of: POSITIVE, NEGATIVE, or NEUTRAL\n");
         prompt.append("and [CONFIDENCE] is a number between 0 and 1 representing your confidence level.\n\n");
         
-        prompt.append("Then include: ARTICLE BREAKDOWN: followed by a brief sentiment analysis of the most important headlines.\n\n");
+        prompt.append("Example responses:\n");
+        prompt.append("For positive news: SENTIMENT:POSITIVE CONFIDENCE:0.85\n");
+        prompt.append("For negative news: SENTIMENT:NEGATIVE CONFIDENCE:0.75\n");
+        prompt.append("For neutral news: SENTIMENT:NEUTRAL CONFIDENCE:0.60\n\n");
         
         // List all headlines
         prompt.append("==== NEWS HEADLINES ====\n");
@@ -632,9 +667,13 @@ public class LLMAnalysisService implements NewsAnalysisService {
         
         prompt.append("\nBased on these headlines, determine if the overall news sentiment for ");
         prompt.append(symbol).append(" is POSITIVE, NEGATIVE, or NEUTRAL. ");
-        prompt.append("Be particularly attentive to negative signals in the headlines. Headlines discussing drops, losses, ");
-        prompt.append("concerns, investigations, layoffs, or market problems should generally be classified as NEGATIVE. ");
-        prompt.append("Focus on how these headlines would likely impact stock price from an investor perspective.\n\n");
+        prompt.append("Consider the following when analyzing:\n");
+        prompt.append("1. Financial impact: How would this news likely affect the stock price?\n");
+        prompt.append("2. Market reaction: Would investors view this as positive or negative?\n");
+        prompt.append("3. Business implications: Does this indicate growth or decline in the business?\n");
+        prompt.append("4. Competitive position: Does this strengthen or weaken the company's market position?\n\n");
+        prompt.append("IMPORTANT: Avoid defaulting to NEUTRAL unless there is a clear balance of positive and negative news or truly neutral content.\n");
+        prompt.append("Be decisive in your sentiment classification - if there is any clear positive or negative trend, classify accordingly.\n");
         prompt.append("First provide the SENTIMENT and CONFIDENCE, then the article breakdown.");
         
         return prompt.toString();

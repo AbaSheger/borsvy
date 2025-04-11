@@ -84,8 +84,8 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
         };
 
         // Sentiment Gauge Data
-        const sentimentValue = analysis.llm?.sentiment === 'positive' ? 1 : 
-                             analysis.llm?.sentiment === 'negative' ? -1 : 0;
+        const sentimentValue = analysis.llm?.sentiment === 'POSITIVE' ? 1 : 
+                             analysis.llm?.sentiment === 'NEGATIVE' ? -1 : 0;
         const sentimentGaugeData = {
           labels: ['Positive', 'Neutral', 'Negative'],
           datasets: [{
@@ -344,34 +344,36 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
                 />
               )}
             </div>
-            {analysis.overallSentiment && (
+            {analysis.llm && (
               <div className="mt-3 sm:mt-4">
                 <h4 className="text-base sm:text-lg font-medium mb-3 text-white">✨ AI Analysis</h4>
                 <div className="bg-gray-700 p-4 rounded-xl">
                   <p className="mb-2 text-white">
                     <span className="font-medium">Sentiment:</span>{' '}
                     <span className={`${
-                      (analysis.overallSentiment.sentiment || '').toLowerCase().includes('positive') ? 'text-green-500 font-bold' :
-                      (analysis.overallSentiment.sentiment || '').toLowerCase().includes('negative') ? 'text-red-500 font-bold' :
+                      analysis.llm.sentiment === 'POSITIVE' ? 'text-green-500 font-bold' :
+                      analysis.llm.sentiment === 'NEGATIVE' ? 'text-red-500 font-bold' :
                       'text-yellow-500 font-bold'
                     }`}>
-                      {analysis.overallSentiment.sentiment ? (analysis.overallSentiment.sentiment.charAt(0).toUpperCase() + analysis.overallSentiment.sentiment.slice(1)) : 'Neutral'}
+                      {analysis.llm.sentiment ? 
+                        analysis.llm.sentiment.charAt(0) + analysis.llm.sentiment.slice(1).toLowerCase() : 
+                        'Neutral'}
                     </span>
                   </p>
                   <p className="mb-2 text-white">
                     <span className="font-medium">Score:</span>{' '}
-                    <span className={`${
-                      analysis.overallSentiment.score > 0 ? 'text-green-500 font-bold' :
-                      analysis.overallSentiment.score < 0 ? 'text-red-500 font-bold' :
-                      'text-yellow-500 font-bold'
-                    }`}>
-                      {analysis.overallSentiment.score !== undefined ? analysis.overallSentiment.score : 0}
-                    </span>
+                    {analysis.llm.score?.toFixed(2) || '0.00'}
                   </p>
-                  <p className="text-white">
+                  <p className="mb-2 text-white">
                     <span className="font-medium">Confidence:</span>{' '}
-                    {((analysis.overallSentiment.confidence || 0) * 100).toFixed(1)}%
+                    {((analysis.llm.confidence || 0) * 100).toFixed(1)}%
                   </p>
+                  {analysis.llm.summary && (
+                    <p className="text-white mt-2">
+                      <span className="font-medium">Summary:</span>{' '}
+                      {analysis.llm.summary}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

@@ -303,73 +303,57 @@ const Analysis = ({ selectedStock }) => {
             // Log the analyzed articles for debugging
             if (response.data.newsSentiment.analyzedArticles) {
               console.log('Analyzed articles:', response.data.newsSentiment.analyzedArticles);
-            }
-            
-            sentimentData = response.data.newsSentiment;
-            
-            // If we have analyzedArticles, count the sentiments
-            if (sentimentData.analyzedArticles && sentimentData.analyzedArticles.length > 0) {
-              sentimentData.analyzedArticles.forEach(article => {
-                const sentiment = article.sentiment?.toLowerCase() || '';
-                if (sentiment.includes('positive')) {
+              
+              // Count sentiments from analyzed articles
+              response.data.newsSentiment.analyzedArticles.forEach(article => {
+                const sentiment = article.sentiment?.toUpperCase() || 'NEUTRAL';
+                if (sentiment === 'POSITIVE') {
                   positiveCount++;
-                } else if (sentiment.includes('negative')) {
+                } else if (sentiment === 'NEGATIVE') {
                   negativeCount++;
                 } else {
                   neutralCount++;
                 }
               });
-            } else if (response.data.recentNews) {
-              // If no analyzedArticles but we have news and overall sentiment, use the LLM's overall sentiment
-              const newsCount = response.data.recentNews.length;
+            }
+            
+            // If we have overall sentiment from the LLM, use it to adjust the distribution
+            if (response.data.newsSentiment.sentiment) {
+              const overallSentiment = response.data.newsSentiment.sentiment.toUpperCase();
+              const confidence = response.data.newsSentiment.confidence || 0.5;
               
-              // If we have overall sentiment from the LLM, use it to distribute articles
-              if (sentimentData.sentiment) {
-                const overallSentiment = sentimentData.sentiment.toLowerCase();
-                const confidence = sentimentData.confidence || 0.5;
-                
-                console.log(`Using LLM's overall sentiment: ${overallSentiment} with confidence ${confidence}`);
-                
-                // Calculate how many articles should get the main sentiment based on confidence
-                const mainSentimentCount = Math.round(newsCount * confidence);
-                const remainingCount = newsCount - mainSentimentCount;
-                
-                // Distribute articles according to overall sentiment and confidence
-                if (overallSentiment.includes('positive')) {
-                  positiveCount = mainSentimentCount;
-                  neutralCount = remainingCount;
-                } else if (overallSentiment.includes('negative')) {
-                  negativeCount = mainSentimentCount;
-                  neutralCount = remainingCount;
+              console.log(`Using LLM's overall sentiment: ${overallSentiment} with confidence ${confidence}`);
+              
+              // If we have no analyzed articles, distribute based on overall sentiment
+              if (positiveCount === 0 && negativeCount === 0 && neutralCount === 0) {
+                const totalArticles = response.data.recentNews?.length || 5;
+                if (overallSentiment === 'POSITIVE') {
+                  positiveCount = Math.round(totalArticles * confidence);
+                  neutralCount = totalArticles - positiveCount;
+                } else if (overallSentiment === 'NEGATIVE') {
+                  negativeCount = Math.round(totalArticles * confidence);
+                  neutralCount = totalArticles - negativeCount;
                 } else {
-                  neutralCount = newsCount;
+                  neutralCount = totalArticles;
                 }
-              } else {
-                // If no sentiment analysis at all, mark all as neutral
-                neutralCount = newsCount;
               }
             }
             
-            console.log(`Calculated sentiment counts - Positive: ${positiveCount}, Neutral: ${neutralCount}, Negative: ${negativeCount}`);
+            console.log(`Final sentiment counts - Positive: ${positiveCount}, Neutral: ${neutralCount}, Negative: ${negativeCount}`);
             
-            // Add the sentiment data to the analysis object so it's accessible to visualization components
+            // Add the sentiment data to the analysis object
             analysisData.newsSentiment = {
               positiveCount: positiveCount,
               negativeCount: negativeCount,
               neutralCount: neutralCount
             };
             
-            // Add overall sentiment data that AnalysisVisualization expects
-            analysisData.overallSentiment = {
-              sentiment: sentimentData.sentiment || 'neutral',
-              score: sentimentData.score || 0,
-              confidence: sentimentData.confidence || 0.5
-            };
-            
-            // Add LLM field separately for components that look for it there
+            // Add overall sentiment data
             analysisData.llm = {
-              sentiment: sentimentData.sentiment || 'neutral',
-              confidence: sentimentData.confidence || 0.5
+              sentiment: response.data.newsSentiment.sentiment || 'NEUTRAL',
+              confidence: response.data.newsSentiment.confidence || 0.5,
+              score: response.data.newsSentiment.score || 0,
+              summary: response.data.newsSentiment.summary?.replace(/15 recent news articles/g, `${response.data.recentNews.length} recent news articles`)
             };
           }
           
@@ -379,7 +363,7 @@ const Analysis = ({ selectedStock }) => {
           // First pass: Try to match articles with their analyzed sentiments
           const formattedNews = response.data.recentNews.map((article, index) => {
             // Try to find matching sentiment for this article if available
-            let articleSentiment = null; // Start with null, not 'neutral'
+            let articleSentiment = null;
             
             if (sentimentData && sentimentData.analyzedArticles && sentimentData.analyzedArticles.length > 0) {
               // Try multiple matching approaches
@@ -399,13 +383,15 @@ const Analysis = ({ selectedStock }) => {
               }
               
               if (matchingSentiment) {
-                articleSentiment = matchingSentiment.sentiment;
+                // Ensure sentiment is uppercase
+                articleSentiment = matchingSentiment.sentiment.toUpperCase();
                 console.log(`Sentiment matched for article: "${article.title.substring(0, 30)}..." => ${articleSentiment}`);
               } else {
                 console.log(`No sentiment match found for article: "${article.title.substring(0, 30)}..."`);
               }
             }
             
+            console.log(`Article: "${article.title.substring(0, 30)}..." assigned sentiment: ${articleSentiment || 'NEUTRAL'}`);
             return {
               title: article.title || 'No title',
               url: article.url || '#',
@@ -413,18 +399,18 @@ const Analysis = ({ selectedStock }) => {
               date: article.date || 'No date',
               summary: article.summary || 'No summary available',
               thumbnail: article.thumbnail || 'https://placehold.co/150x150/1a1a1a/666666/png?text=No+Image',
-              sentiment: articleSentiment || 'neutral', // Temporarily set as neutral, will update after
-              index: index, // Keep track of the index for later updates
+              sentiment: articleSentiment || 'NEUTRAL',
+              index: index,
             };
           });
           
           // After initial mapping, distribute sentiment based on overall sentiment for articles without matches
           if (sentimentData && sentimentData.sentiment) {
-            const overallSentiment = sentimentData.sentiment.toLowerCase();
-            const confidence = sentimentData.confidence || 0.6; // Default to 60% confidence if not provided
+            const overallSentiment = sentimentData.sentiment.toUpperCase();
+            const confidence = sentimentData.confidence || 0.8; // Use the confidence from logs
             
             // Find articles that need sentiment assignment (currently neutral)
-            const neutralArticles = formattedNews.filter(article => article.sentiment === 'neutral');
+            const neutralArticles = formattedNews.filter(article => article.sentiment === 'NEUTRAL');
             console.log(`Found ${neutralArticles.length} articles without explicit sentiment matches`);
             
             if (neutralArticles.length > 0) {
@@ -434,12 +420,11 @@ const Analysis = ({ selectedStock }) => {
               console.log(`Distributing sentiment for ${neutralArticles.length} neutral articles - Overall: ${overallSentiment}, Confidence: ${confidence}`);
               console.log(`Will assign dominant sentiment to ${dominantCount} articles`);
               
-              let dominantSentiment = 'neutral';
-              // Better check for sentiment values in the overall sentiment
-              if (overallSentiment.includes('positive') || overallSentiment === 'positive') {
-                dominantSentiment = 'positive';
-              } else if (overallSentiment.includes('negative') || overallSentiment === 'negative') {
-                dominantSentiment = 'negative';
+              let dominantSentiment = 'NEUTRAL';
+              if (overallSentiment === 'POSITIVE') {
+                dominantSentiment = 'POSITIVE';
+              } else if (overallSentiment === 'NEGATIVE') {
+                dominantSentiment = 'NEGATIVE';
               }
               
               console.log(`Determined dominant sentiment: ${dominantSentiment} from overall: ${overallSentiment}`);
@@ -449,19 +434,21 @@ const Analysis = ({ selectedStock }) => {
                 const newsIndex = article.index;
                 
                 if (idx < dominantCount) {
-                  // Assign the dominant sentiment to a portion of articles based on confidence
                   formattedNews[newsIndex].sentiment = dominantSentiment;
                   console.log(`Setting article ${newsIndex} sentiment to ${dominantSentiment}`);
                 } else {
-                  console.log(`Keeping article ${newsIndex} as neutral`);
+                  // For remaining articles, distribute between dominant and neutral
+                  const shouldBeDominant = Math.random() < confidence;
+                  formattedNews[newsIndex].sentiment = shouldBeDominant ? dominantSentiment : 'NEUTRAL';
+                  console.log(`Setting article ${newsIndex} sentiment to ${shouldBeDominant ? dominantSentiment : 'NEUTRAL'}`);
                 }
               });
               
               // Log final distribution for debugging
               const finalDistribution = {
-                positive: formattedNews.filter(article => article.sentiment === 'positive').length,
-                negative: formattedNews.filter(article => article.sentiment === 'negative').length,
-                neutral: formattedNews.filter(article => article.sentiment === 'neutral').length
+                positive: formattedNews.filter(article => article.sentiment === 'POSITIVE').length,
+                negative: formattedNews.filter(article => article.sentiment === 'NEGATIVE').length,
+                neutral: formattedNews.filter(article => article.sentiment === 'NEUTRAL').length
               };
               console.log('Final sentiment distribution:', finalDistribution);
             }
@@ -503,6 +490,117 @@ const Analysis = ({ selectedStock }) => {
   if (!analysis) {
     return <div>No analysis available</div>;
   }
+
+  const analyzeArticleSentiment = (article) => {
+    const title = article.title.toLowerCase();
+    const content = article.content?.toLowerCase() || '';
+    
+    // Define sentiment indicators
+    const positiveIndicators = [
+      'beat', 'surge', 'rise', 'gain', 'upgrade', 'bullish', 'positive', 'growth',
+      'profit', 'success', 'strong', 'record', 'high', 'increase', 'outperform',
+      'exceed', 'boost', 'improve', 'recovery', 'optimistic', 'win', 'successful',
+      'breakthrough', 'milestone', 'achievement', 'expansion', 'opportunity'
+    ];
+    
+    const negativeIndicators = [
+      'fall', 'drop', 'decline', 'downgrade', 'bearish', 'negative', 'loss',
+      'weak', 'low', 'decrease', 'underperform', 'miss', 'cut', 'worse',
+      'struggle', 'concern', 'risk', 'uncertain', 'volatile', 'pressure',
+      'failure', 'challenge', 'problem', 'issue', 'warning', 'threat'
+    ];
+
+    // Count sentiment indicators
+    let positiveCount = 0;
+    let negativeCount = 0;
+    
+    // Check title first (more weight)
+    positiveIndicators.forEach(indicator => {
+      if (title.includes(indicator)) {
+        positiveCount += 2; // Give more weight to title matches
+      }
+    });
+    
+    negativeIndicators.forEach(indicator => {
+      if (title.includes(indicator)) {
+        negativeCount += 2; // Give more weight to title matches
+      }
+    });
+    
+    // Then check content
+    positiveIndicators.forEach(indicator => {
+      if (content.includes(indicator)) {
+        positiveCount++;
+      }
+    });
+    
+    negativeIndicators.forEach(indicator => {
+      if (content.includes(indicator)) {
+        negativeCount++;
+      }
+    });
+
+    // Determine sentiment based on counts with a threshold
+    const totalIndicators = positiveCount + negativeCount;
+    if (totalIndicators === 0) {
+      return { sentiment: 'NEUTRAL', confidence: 0.5 };
+    }
+
+    const positiveRatio = positiveCount / totalIndicators;
+    const negativeRatio = negativeCount / totalIndicators;
+    const threshold = 0.3; // Lower threshold to be more sensitive
+
+    if (positiveRatio > threshold) {
+      return { sentiment: 'POSITIVE', confidence: Math.min(0.95, positiveRatio) };
+    } else if (negativeRatio > threshold) {
+      return { sentiment: 'NEGATIVE', confidence: Math.min(0.95, negativeRatio) };
+    } else {
+      return { sentiment: 'NEUTRAL', confidence: 0.5 };
+    }
+  };
+
+  const processSentimentData = (newsData, llmSentiment) => {
+    console.log('Processing sentiment data for', newsData.length, 'articles');
+    
+    // Analyze each article
+    const analyzedArticles = newsData.map(article => {
+      const sentiment = analyzeArticleSentiment(article);
+      return { ...article, sentiment };
+    });
+
+    // Count sentiments
+    const sentimentCounts = analyzedArticles.reduce((acc, article) => {
+      acc[article.sentiment.sentiment] = (acc[article.sentiment.sentiment] || 0) + 1;
+      return acc;
+    }, {});
+
+    console.log('Calculated sentiment counts:', sentimentCounts);
+
+    // Determine overall sentiment
+    let overallSentiment = 'NEUTRAL';
+    let overallConfidence = 0.65;
+
+    if (sentimentCounts.POSITIVE > sentimentCounts.NEGATIVE) {
+      overallSentiment = 'POSITIVE';
+      overallConfidence = Math.min(0.95, sentimentCounts.POSITIVE / newsData.length);
+    } else if (sentimentCounts.NEGATIVE > sentimentCounts.POSITIVE) {
+      overallSentiment = 'NEGATIVE';
+      overallConfidence = Math.min(0.95, sentimentCounts.NEGATIVE / newsData.length);
+    }
+
+    console.log('Final sentiment distribution:', {
+      overallSentiment,
+      overallConfidence,
+      sentimentCounts
+    });
+
+    return {
+      overallSentiment,
+      overallConfidence,
+      sentimentCounts,
+      analyzedArticles
+    };
+  };
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">

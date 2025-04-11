@@ -58,17 +58,21 @@ function NewsCard({ news }) {
                 {article.sentiment && (
                   <>
                     <span className="mx-2">•</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      article.sentiment === 'positive' 
-                        ? 'bg-green-500/20 text-green-400' 
-                        : article.sentiment === 'negative'
-                          ? 'bg-red-500/20 text-red-400'
-                          : 'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {article.sentiment === 'positive' ? '↑ Positive' : 
-                       article.sentiment === 'negative' ? '↓ Negative' : 
-                       'Neutral'}
-                    </span>
+                    <div 
+                      className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        article.sentiment === 'POSITIVE' || article.sentiment === 'positive' 
+                          ? 'bg-green-500/20 text-green-400' 
+                          : article.sentiment === 'NEGATIVE' || article.sentiment === 'negative'
+                            ? 'bg-red-500/20 text-red-400' 
+                            : 'bg-yellow-500/20 text-yellow-400'
+                      }`}
+                    >
+                      {article.sentiment === 'POSITIVE' || article.sentiment === 'positive' 
+                        ? 'Positive' 
+                        : article.sentiment === 'NEGATIVE' || article.sentiment === 'negative'
+                          ? 'Negative' 
+                          : 'Neutral'}
+                    </div>
                   </>
                 )}
               </div>
