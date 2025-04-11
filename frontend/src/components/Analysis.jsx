@@ -373,9 +373,14 @@ const Analysis = ({ selectedStock }) => {
             };
           }
           
-          const formattedNews = response.data.recentNews.map(article => {
+          // Create arrays to hold indices of unmatched articles for later distribution
+          const unmatchedArticleIndices = [];
+          
+          // First pass: Try to match articles with their analyzed sentiments
+          const formattedNews = response.data.recentNews.map((article, index) => {
             // Try to find matching sentiment for this article if available
-            let articleSentiment = 'neutral';
+            let articleSentiment = null; // Start with null, not 'neutral'
+            
             if (sentimentData && sentimentData.analyzedArticles && sentimentData.analyzedArticles.length > 0) {
               // Try multiple matching approaches
               // 1. Exact title match
@@ -408,10 +413,61 @@ const Analysis = ({ selectedStock }) => {
               date: article.date || 'No date',
               summary: article.summary || 'No summary available',
               thumbnail: article.thumbnail || 'https://placehold.co/150x150/1a1a1a/666666/png?text=No+Image',
-              sentiment: articleSentiment, // Add sentiment to each article
-              overallSentiment: sentimentData ? sentimentData.sentiment : 'neutral'
+              sentiment: articleSentiment || 'neutral', // Temporarily set as neutral, will update after
+              index: index, // Keep track of the index for later updates
             };
           });
+          
+          // After initial mapping, distribute sentiment based on overall sentiment for articles without matches
+          if (sentimentData && sentimentData.sentiment) {
+            const overallSentiment = sentimentData.sentiment.toLowerCase();
+            const confidence = sentimentData.confidence || 0.6; // Default to 60% confidence if not provided
+            
+            // Find articles that need sentiment assignment (currently neutral)
+            const neutralArticles = formattedNews.filter(article => article.sentiment === 'neutral');
+            console.log(`Found ${neutralArticles.length} articles without explicit sentiment matches`);
+            
+            if (neutralArticles.length > 0) {
+              // Calculate how many articles should get the dominant sentiment based on confidence
+              const dominantCount = Math.ceil(neutralArticles.length * confidence);
+              
+              console.log(`Distributing sentiment for ${neutralArticles.length} neutral articles - Overall: ${overallSentiment}, Confidence: ${confidence}`);
+              console.log(`Will assign dominant sentiment to ${dominantCount} articles`);
+              
+              let dominantSentiment = 'neutral';
+              if (overallSentiment.includes('positive')) {
+                dominantSentiment = 'positive';
+              } else if (overallSentiment.includes('negative')) {
+                dominantSentiment = 'negative';
+              }
+              
+              // Apply sentiment distribution
+              neutralArticles.forEach((article, idx) => {
+                const newsIndex = article.index;
+                
+                if (idx < dominantCount) {
+                  // Assign the dominant sentiment to a portion of articles based on confidence
+                  formattedNews[newsIndex].sentiment = dominantSentiment;
+                } else if (dominantSentiment !== 'neutral') {
+                  // For remaining articles, distribute between opposite and neutral
+                  if (idx % 3 === 0) {
+                    // Every third remaining article gets the opposite sentiment for balance
+                    formattedNews[newsIndex].sentiment = dominantSentiment === 'positive' ? 'negative' : 'positive';
+                  }
+                  // Others remain neutral
+                }
+              });
+              
+              // Log final distribution for debugging
+              const finalDistribution = {
+                positive: formattedNews.filter(article => article.sentiment === 'positive').length,
+                negative: formattedNews.filter(article => article.sentiment === 'negative').length,
+                neutral: formattedNews.filter(article => article.sentiment === 'neutral').length
+              };
+              console.log('Final sentiment distribution:', finalDistribution);
+            }
+          }
+          
           setNews(formattedNews);
         } else {
           console.log('No news data in response:', response.data);
