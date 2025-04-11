@@ -5,15 +5,11 @@ import org.springframework.stereotype.Service;
 import org.ta4j.core.*;
 import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.MACDIndicator;
+import org.ta4j.core.indicators.EMAIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.num.DecimalNum;
 import java.time.Duration;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
@@ -27,8 +23,6 @@ import java.util.Map;
 public class TechnicalIndicatorService {
 
     /**
-     * Converts a list of StockPrice objects to a TA4J BarSeries
-         /**
      * Converts a list of StockPrice objects to a TA4J BarSeries
      */
     public BarSeries convertToBarSeries(List<StockPrice> priceData, String symbol) {
@@ -52,19 +46,45 @@ public class TechnicalIndicatorService {
         }
         
         return series;
-    }
-      /**
+    }    /**
      * Calculates RSI indicator
      */
     public double calculateRSI(BarSeries series, int period) {
-        if (series.getBarCount() < period) {
-            return 50.0; // Default value if not enough data
+        if (series.getBarCount() < period + 1) {
+            // Log that we don't have enough data
+            return calculateSimpleRSI(series); // Use simplified calculation instead of default
         }
         
         ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
         RSIIndicator rsi = new RSIIndicator(closePrice, period);
         
         return rsi.getValue(series.getEndIndex()).doubleValue();
+    }
+    
+    /**
+     * Simple RSI calculation when not enough historical data is available
+     */
+    private double calculateSimpleRSI(BarSeries series) {
+        if (series.getBarCount() < 2) {
+            return 50.0; // Truly not enough data
+        }
+        
+        // Calculate a simple RSI based on the last price movement
+        double currentClose = series.getBar(series.getEndIndex()).getClosePrice().doubleValue();
+        double previousClose = series.getBar(series.getEndIndex() - 1).getClosePrice().doubleValue();
+        
+        double priceChange = currentClose - previousClose;
+        
+        // Simple RSI formula that gives higher values for positive changes
+        if (priceChange > 0) {
+            // Positive change - map to 50-100 range
+            double percentChange = (priceChange / previousClose) * 100;
+            return 50.0 + Math.min(percentChange * 5, 45.0); // Cap at 95
+        } else {
+            // Negative change - map to 0-50 range
+            double percentChange = Math.abs(priceChange / previousClose) * 100;
+            return 50.0 - Math.min(percentChange * 5, 45.0); // Cap at 5
+        }
     }
     
     /**
@@ -81,6 +101,35 @@ public class TechnicalIndicatorService {
         return sma.getValue(series.getEndIndex()).doubleValue();
     }
       /**
+     * Calculates MACD indicator
+     */
+    public Map<String, Double> calculateMACD(BarSeries series) {
+        Map<String, Double> macdData = new HashMap<>();
+        
+        if (series.getBarCount() < 26) { // MACD needs at least 26 bars
+            macdData.put("macd", 0.0);
+            macdData.put("signal", 0.0);
+            macdData.put("histogram", 0.0);
+            return macdData;
+        }
+        
+        ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
+        MACDIndicator macd = new MACDIndicator(closePrice, 12, 26);
+        EMAIndicator signal = new EMAIndicator(macd, 9);
+        
+        int endIndex = series.getEndIndex();
+        double macdValue = macd.getValue(endIndex).doubleValue();
+        double signalValue = signal.getValue(endIndex).doubleValue();
+        double histogram = macdValue - signalValue;
+        
+        macdData.put("macd", macdValue);
+        macdData.put("signal", signalValue);
+        macdData.put("histogram", histogram);
+        
+        return macdData;
+    }
+    
+    /**
      * Generates a comprehensive technical analysis
      */
     public Map<String, Object> generateTechnicalAnalysis(List<StockPrice> priceData, String symbol) {
@@ -100,6 +149,7 @@ public class TechnicalIndicatorService {
             double rsi = calculateRSI(series, 14);
             double sma20 = calculateSMA(series, 20);
             double sma50 = calculateSMA(series, 50);
+            Map<String, Double> macdValues = calculateMACD(series);
             double currentPrice = series.getBar(series.getEndIndex()).getClosePrice().doubleValue();
             
             // Determine trend
@@ -124,6 +174,21 @@ public class TechnicalIndicatorService {
                 signals.put("RSI", "Neutral (RSI: " + String.format("%.2f", rsi) + ")");
             }
             
+            // MACD signals
+            double macdValue = macdValues.get("macd");
+            double macdSignal = macdValues.get("signal");
+            double macdHistogram = macdValues.get("histogram");
+            
+            String macdTrend;
+            if (macdHistogram > 0) {
+                macdTrend = "Bullish";
+            } else if (macdHistogram < 0) {
+                macdTrend = "Bearish";
+            } else {
+                macdTrend = "Neutral";
+            }
+            signals.put("MACD", macdTrend + " (MACD: " + String.format("%.2f", macdValue) + ")");
+            
             // Moving Average signals
             if (currentPrice > sma20) {
                 signals.put("SMA20", "Price above 20-day SMA (Bullish)");
@@ -137,10 +202,20 @@ public class TechnicalIndicatorService {
                 signals.put("SMA50", "Price below 50-day SMA (Bearish)");
             }
             
+            // Calculate simple momentum
+            double momentum = 0;
+            if (series.getBarCount() > 5) {
+                double previousPrice = series.getBar(series.getEndIndex() - 5).getClosePrice().doubleValue();
+                momentum = ((currentPrice / previousPrice) - 1) * 100;
+                String momentumSignal = momentum > 0 ? "Positive" : "Negative";
+                signals.put("Momentum", momentumSignal + " (" + String.format("%.2f", momentum) + "%)");
+            }
+            
             // Store results
             analysis.put("rsi", rsi);
             analysis.put("sma20", sma20);
             analysis.put("sma50", sma50);
+            analysis.put("macd", macdValues);
             analysis.put("currentPrice", currentPrice);
             analysis.put("trend", trend);
             analysis.put("signals", signals);
