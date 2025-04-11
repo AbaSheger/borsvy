@@ -351,11 +351,11 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
                   <p className="mb-2 text-white">
                     <span className="font-medium">Sentiment:</span>{' '}
                     <span className={`${
-                      analysis.overallSentiment.sentiment === 'positive' || analysis.overallSentiment.sentiment === 'strongly positive' ? 'text-green-500 font-bold' :
-                      analysis.overallSentiment.sentiment === 'negative' || analysis.overallSentiment.sentiment === 'strongly negative' ? 'text-red-500 font-bold' :
+                      (analysis.overallSentiment.sentiment || '').toLowerCase().includes('positive') ? 'text-green-500 font-bold' :
+                      (analysis.overallSentiment.sentiment || '').toLowerCase().includes('negative') ? 'text-red-500 font-bold' :
                       'text-yellow-500 font-bold'
                     }`}>
-                      {analysis.overallSentiment.sentiment.charAt(0).toUpperCase() + analysis.overallSentiment.sentiment.slice(1)}
+                      {analysis.overallSentiment.sentiment ? (analysis.overallSentiment.sentiment.charAt(0).toUpperCase() + analysis.overallSentiment.sentiment.slice(1)) : 'Neutral'}
                     </span>
                   </p>
                   <p className="mb-2 text-white">
@@ -365,12 +365,12 @@ const AnalysisVisualization = ({ analysis, technicalData }) => {
                       analysis.overallSentiment.score < 0 ? 'text-red-500 font-bold' :
                       'text-yellow-500 font-bold'
                     }`}>
-                      {analysis.overallSentiment.score}
+                      {analysis.overallSentiment.score !== undefined ? analysis.overallSentiment.score : 0}
                     </span>
                   </p>
                   <p className="text-white">
                     <span className="font-medium">Confidence:</span>{' '}
-                    {(analysis.overallSentiment.llmConfidence * 100).toFixed(1)}%
+                    {((analysis.overallSentiment.confidence || 0) * 100).toFixed(1)}%
                   </p>
                 </div>
               </div>

@@ -295,12 +295,10 @@ const Analysis = ({ selectedStock }) => {
           if (response.data.newsSentiment) {
             console.log('Sentiment data received:', response.data.newsSentiment);
             
-            // Ensure sentiment counts are properly set
-            const positiveCount = response.data.newsSentiment.positiveCount || 0;
-            const negativeCount = response.data.newsSentiment.negativeCount || 0;
-            const neutralCount = response.data.newsSentiment.neutralCount || 0;
-            
-            console.log(`Sentiment distribution - Positive: ${positiveCount}, Neutral: ${neutralCount}, Negative: ${negativeCount}`);
+            // Initialize sentiment counts as 0
+            let positiveCount = 0;
+            let negativeCount = 0;
+            let neutralCount = 0;
             
             // Log the analyzed articles for debugging
             if (response.data.newsSentiment.analyzedArticles) {
@@ -308,6 +306,45 @@ const Analysis = ({ selectedStock }) => {
             }
             
             sentimentData = response.data.newsSentiment;
+            
+            // If we have analyzedArticles, count the sentiments
+            if (sentimentData.analyzedArticles && sentimentData.analyzedArticles.length > 0) {
+              sentimentData.analyzedArticles.forEach(article => {
+                const sentiment = article.sentiment?.toLowerCase() || '';
+                if (sentiment.includes('positive')) {
+                  positiveCount++;
+                } else if (sentiment.includes('negative')) {
+                  negativeCount++;
+                } else {
+                  neutralCount++;
+                }
+              });
+            } else if (response.data.recentNews) {
+              // If no analyzed articles but we have news, set a fallback of 1 neutral for each news article
+              neutralCount = response.data.recentNews.length;
+            }
+            
+            console.log(`Calculated sentiment counts - Positive: ${positiveCount}, Neutral: ${neutralCount}, Negative: ${negativeCount}`);
+            
+            // Add the sentiment data to the analysis object so it's accessible to visualization components
+            analysisData.newsSentiment = {
+              positiveCount: positiveCount,
+              negativeCount: negativeCount,
+              neutralCount: neutralCount
+            };
+            
+            // Add overall sentiment data that AnalysisVisualization expects
+            analysisData.overallSentiment = {
+              sentiment: sentimentData.sentiment || 'neutral',
+              score: sentimentData.score || 0,
+              confidence: sentimentData.confidence || 0.5
+            };
+            
+            // Add LLM field separately for components that look for it there
+            analysisData.llm = {
+              sentiment: sentimentData.sentiment || 'neutral',
+              confidence: sentimentData.confidence || 0.5
+            };
           }
           
           const formattedNews = response.data.recentNews.map(article => {
@@ -521,6 +558,7 @@ const Analysis = ({ selectedStock }) => {
             <>
               <AnalysisVisualization 
                 analysis={analysis}
+                technicalData={analysis?.technical}
               />
               {/* News Card */}
               <div className="mt-8">

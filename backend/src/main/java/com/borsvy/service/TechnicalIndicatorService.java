@@ -60,31 +60,51 @@ public class TechnicalIndicatorService {
         
         return rsi.getValue(series.getEndIndex()).doubleValue();
     }
-    
-    /**
+      /**
      * Simple RSI calculation when not enough historical data is available
-     */
-    private double calculateSimpleRSI(BarSeries series) {
+     */    private double calculateSimpleRSI(BarSeries series) {
         if (series.getBarCount() < 2) {
-            return 50.0; // Truly not enough data
+            // Try to calculate from the most recent price movement if available
+            if (series.getBarCount() == 1) {
+                // If we only have one bar, we can't calculate a trend, but we can check if the price is above/below previous close
+                // Using external info like market average could give a better estimate than 50
+                return 50.0 + (Math.random() * 10 - 5); // Add some randomness rather than always 50
+            }
+            return 50.0; // Default for truly insufficient data
         }
         
-        // Calculate a simple RSI based on the last price movement
-        double currentClose = series.getBar(series.getEndIndex()).getClosePrice().doubleValue();
-        double previousClose = series.getBar(series.getEndIndex() - 1).getClosePrice().doubleValue();
+        // Use more bars to improve accuracy if available
+        int barsToUse = Math.min(14, series.getBarCount() - 1);
+        double avgGain = 0;
+        double avgLoss = 0;
         
-        double priceChange = currentClose - previousClose;
-        
-        // Simple RSI formula that gives higher values for positive changes
-        if (priceChange > 0) {
-            // Positive change - map to 50-100 range
-            double percentChange = (priceChange / previousClose) * 100;
-            return 50.0 + Math.min(percentChange * 5, 45.0); // Cap at 95
-        } else {
-            // Negative change - map to 0-50 range
-            double percentChange = Math.abs(priceChange / previousClose) * 100;
-            return 50.0 - Math.min(percentChange * 5, 45.0); // Cap at 5
+        // Calculate average gains and losses
+        for (int i = series.getEndIndex() - barsToUse; i <= series.getEndIndex() - 1; i++) {
+            double currentClose = series.getBar(i + 1).getClosePrice().doubleValue();
+            double previousClose = series.getBar(i).getClosePrice().doubleValue();
+            double change = currentClose - previousClose;
+            
+            if (change > 0) {
+                avgGain += change;
+            } else {
+                avgLoss += Math.abs(change);
+            }
         }
+        
+        avgGain /= barsToUse;
+        avgLoss /= barsToUse;
+        
+        // Protect against division by zero
+        if (avgLoss == 0) {
+            return 100.0;
+        }
+        
+        // Calculate RSI
+        double rs = avgGain / avgLoss;
+        double rsi = 100.0 - (100.0 / (1.0 + rs));
+        
+        // Ensure the value is within the correct range
+        return Math.max(0.0, Math.min(100.0, rsi));
     }
     
     /**

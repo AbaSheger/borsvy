@@ -193,6 +193,7 @@ public class AnalysisService {
             // Generate technical signals
             Map<String, String> signals = generateTechnicalSignals(rsiValue, stock.getPrice(), sma20Value, sma50Value, stock);
             
+            analysis.put("price", stock.getPrice());
             analysis.put("rsi", rsiValue);
             analysis.put("sma20", sma20Value);
             analysis.put("sma50", sma50Value);
@@ -339,6 +340,16 @@ public class AnalysisService {
         sentimentResponse.put("llmAnalysis", llmAnalysisText);
         sentimentResponse.put("technicalTrend", technicalTrend);
         sentimentResponse.put("fundamentalSignals", fundamentalSignals);
+        
+        // Ensure the same confidence value is used in both places by modifying the llmAnalysis object
+        if (llmAnalysis instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> llmMap = (Map<String, Object>) llmAnalysis;
+            // Update the confidence in the llmAnalysis to match the overallSentiment confidence
+            if (llmMap.containsKey("confidence")) {
+                llmMap.put("confidence", llmConfidence);
+            }
+        }
         
         // Add sentiment distribution
         Map<String, Integer> distribution = new HashMap<>();
