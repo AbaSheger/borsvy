@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
+import { axiosConfig } from '../config';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Tooltip } from 'antd';
 import { useTheme } from '../context/ThemeContext';
@@ -38,7 +39,7 @@ function PeerComparison({ symbol }) {
       try {
         setIsLoading(true);
         setError(null);
-        const response = await axios.get(`http://localhost:8080/api/stocks/${symbol}/peers`);
+        const response = await axios.get(`/api/stocks/${symbol}/peers`, axiosConfig);
         if (isMounted && response.data) {
           setPeerData(response.data);
         }

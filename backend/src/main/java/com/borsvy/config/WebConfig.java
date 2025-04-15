@@ -19,8 +19,8 @@ public class WebConfig implements WebMvcConfigurer {
             .allowedOrigins(
                 "http://localhost:3001", 
                 "http://localhost:5173",
-                "https://grim-shanda-borsvy-4692de87.koyeb.app",
-                "https://borsvy-backend-borsvy-295875c6.koyeb.app"
+                "http://37.27.31.97"
+            
             )
             .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
             .allowedHeaders("*")
@@ -35,8 +35,8 @@ public class WebConfig implements WebMvcConfigurer {
             "http://localhost:3000", 
             "http://localhost:3001",
             "http://localhost:5173",
-            "https://grim-shanda-borsvy-4692de87.koyeb.app",
-            "https://borsvy-backend-borsvy-295875c6.koyeb.app"
+            "http://37.27.31.97"
+           
         ));
         corsConfig.setAllowedHeaders(Arrays.asList("Origin", "Content-Type", "Accept", "Authorization"));
         corsConfig.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));

@@ -26,6 +26,7 @@ graph TD
         C --> SERP[SerpAPI];
         C --> RAPID[RapidAPI: Yahoo Finance];
         C --> POLY[Polygon.io];
+        C --> GROQ[Groq AI];
     end
     
     B --> DB[H2 Database];
@@ -44,7 +45,7 @@ graph TD
         SERP
         RAPID
         POLY
-        GROQ[Groq AI]
+        GROQ
     end
     
     classDef frontend fill:#C7D2FE,stroke:#4F46E5,color:#111827;
@@ -156,8 +157,8 @@ graph LR
   - **SerpAPI:** Primary news source (Google News search).
   - **RapidAPI (Yahoo Finance):** Fallback news source.
   - **Polygon.io:** Historical stock data.
-  - **Hugging Face API:** LLM for AI analysis (`mistralai/Mistral-7B-Instruct-v0.2`).
-- **Deployment**: Docker containers (intended for platforms like Railway or similar).
+  - **Groq API:** LLM for AI analysis (`llama-3.3-70b-versatile`).
+- **Deployment**: Hetzner VPS with Nginx, HTTPS/SSL via Let's Encrypt, and systemd service management.
 
 ## Prerequisites
 
@@ -216,26 +217,26 @@ To use the application with full functionality, obtain API keys from the followi
 
 ## Deployment
 
-The application is deployed on Railway, a modern cloud platform that makes it easy to deploy and scale applications.
+The application is deployed on a Hetzner VPS (Virtual Private Server) with a production-grade setup.
 
 ### Frontend Deployment
-```bash
-railway up --service frontend
-```
+The frontend is served by Nginx as static files, with proper MIME types configured for modern JavaScript modules and CSS files.
 
 ### Backend Deployment
+The backend runs as a systemd service for reliability and automatic recovery:
 ```bash
-railway up --service backend
+# View backend service status
+systemctl status borsvy.service
 ```
 
-Railway automatically:
-- Builds and deploys Docker containers
-- Manages environment variables
-- Provides HTTPS endpoints
-- Scales resources as needed
-- Monitors application health
+The deployment includes:
+- HTTPS with Let's Encrypt SSL certificates
+- Cloudflare integration for security and performance
+- Automatic service recovery via systemd
+- Log rotation to manage disk usage
+- HTTP to HTTPS redirection
 
-### Environment Variables (for Deployment Platform like Railway)
+### Environment Variables (for Production Deployment)
 
 - **Frontend Service:**
     - `VITE_API_URL`: Public URL of your deployed backend service.

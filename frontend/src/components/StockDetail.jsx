@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
+import { axiosConfig } from '../config';
 
 function StockDetail({ favorites, addToFavorites, removeFromFavorites }) {
   const { symbol } = useParams();
@@ -16,11 +17,11 @@ function StockDetail({ favorites, addToFavorites, removeFromFavorites }) {
       try {
         setIsLoading(true);
         // Fetch stock details
-        const stockResponse = await axios.get(`http://localhost:8080/api/stocks/${symbol}/details`);
+        const stockResponse = await axios.get(`/api/stocks/${symbol}/details`, axiosConfig);
         setStock(stockResponse.data);
         
         // Fetch AI analysis
-        const analysisResponse = await axios.get(`http://localhost:8080/api/analysis/${symbol}`);
+        const analysisResponse = await axios.get(`/api/analysis/${symbol}`, axiosConfig);
         setAnalysis(analysisResponse.data);
       } catch (err) {
         setError('Failed to fetch stock data. Please try again later.');

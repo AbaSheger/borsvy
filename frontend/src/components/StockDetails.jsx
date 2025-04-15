@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
+import { axiosConfig } from '../config';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Tooltip } from 'antd';
 import { useTheme } from '../context/ThemeContext';
@@ -16,7 +17,7 @@ function StockDetails({ symbol }) {
       try {
         setIsLoading(true);
         setError(null);
-        const response = await axios.get(`http://localhost:8080/api/stocks/${symbol}/details`);
+        const response = await axios.get(`/api/stocks/${symbol}/details`, axiosConfig);
         setDetails(response.data);
       } catch (err) {
         setError('Failed to fetch stock details');

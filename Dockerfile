@@ -13,5 +13,5 @@ RUN cd backend && chmod +x mvnw && ./mvnw clean package -DskipTests
 # Expose the port the application runs on
 EXPOSE 8080
 
-# Define the command to run the application with memory limits
-CMD java -Xmx256m -Xms128m -XX:MaxMetaspaceSize=64m -XX:+UseSerialGC -XX:+UseCompressedOops -XX:+OptimizeStringConcat -XX:+UseStringDeduplication -jar /app/backend/target/*.jar 
+# Define the command to run the application with memory limits and production profile
+CMD java -Xmx256m -Xms128m -XX:MaxMetaspaceSize=64m -XX:+UseSerialGC -XX:+UseCompressedOops -XX:+OptimizeStringConcat -XX:+UseStringDeduplication -jar /app/backend/target/*.jar --spring.profiles.active=prod
