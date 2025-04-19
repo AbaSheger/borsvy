@@ -33,14 +33,21 @@ public class FavoriteService {
      */
     @Transactional
     public Favorite addFavorite(Favorite favorite) {
-        // Set the current time if not provided
+        // Check if already exists
+        if (favoriteRepository.existsById(favorite.getSymbol())) {
+            logger.info("Symbol {} already exists in favorites. Skipping insert.", favorite.getSymbol());
+            return favoriteRepository.findById(favorite.getSymbol()).orElse(favorite); // return existing
+        }
+    
+        // Set current time if not provided
         if (favorite.getAddedAt() == null) {
             favorite.setAddedAt(LocalDateTime.now());
         }
-        
+    
         // Save to database
         return favoriteRepository.save(favorite);
     }
+    
     
     /**
      * Remove a stock from favorites
