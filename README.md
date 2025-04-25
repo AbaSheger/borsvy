@@ -248,6 +248,14 @@ The deployment includes:
     - `GROQ_API_KEY`: Your Groq API key.
     - `RAPIDAPI_API_KEY`: Your RapidAPI key for the Yahoo Finance API.
 
+## Tags
+
+`#StockAnalysis` `#React` `#SpringBoot` `#AI` `#SentimentAnalysis` `#TechnicalIndicators` `#FinancialAPIs` `#DataVisualization` `#DarkMode` `#ResponsiveDesign`
+
+## Deployed Application
+
+The application is live and accessible at: [BörsVy Stock Analysis Platform](https://your-deployed-link.com)
+
 ## License
 
 MIT License
