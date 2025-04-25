@@ -254,7 +254,7 @@ The deployment includes:
 
 ## Deployed Application
 
-The application is live and accessible at: [BörsVy Stock Analysis Platform](https://your-deployed-link.com)
+The application is live and accessible at: [BörsVy Stock Analysis Platform](https://borsvy.abenezeranglo.uk/)
 
 ## License
 
