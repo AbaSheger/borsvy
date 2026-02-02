@@ -52,6 +52,10 @@ public class LLMAnalysisService implements NewsAnalysisService {
         this.technicalIndicatorService = technicalIndicatorService;
         this.polygonClient = polygonClient;
         this.stockService = stockService;
+    }
+    
+    @jakarta.annotation.PostConstruct
+    public void init() {
         log.info("LLMAnalysisService initialized - using Groq API: {}", apiKey != null && !apiKey.equals("fallback"));
     }
     
