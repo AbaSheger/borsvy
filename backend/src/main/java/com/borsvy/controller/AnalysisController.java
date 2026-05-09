@@ -9,7 +9,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/analysis")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class AnalysisController {
 
     private final AnalysisService analysisService;
@@ -23,6 +22,18 @@ public class AnalysisController {
     public ResponseEntity<Map<String, Object>> getAnalysis(@PathVariable String symbol) {
         Map<String, Object> analysis = analysisService.getCompleteAnalysis(symbol);
         return ResponseEntity.ok(analysis);
+    }
+
+    @GetMapping("/{symbol}/ai")
+    public ResponseEntity<Map<String, Object>> getAiAnalysis(@PathVariable String symbol) {
+        return ResponseEntity.ok(analysisService.getAiAnalysis(symbol));
+    }
+
+    @GetMapping("/{symbol}/news")
+    public ResponseEntity<List<Map<String, Object>>> getNews(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "5") int limit) {
+        return ResponseEntity.ok(analysisService.getRecentNews(symbol, limit));
     }
 
     @GetMapping("/{symbol}/price-history")

@@ -1,0 +1,90 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: hetzner-deploy
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Run Playwright tests
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+
+      - name: Compile backend
+        working-directory: backend
+        run: ./mvnw -q -DskipTests compile
+
+  deploy:
+    name: Deploy
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
+          script_stop: true
+          script: |
+            set -e
+
+            APP_DIR="${{ vars.HETZNER_APP_DIR || '/var/www/borsvy' }}"
+            FRONTEND_DIR="${{ vars.HETZNER_FRONTEND_DIR || '/var/www/borsvy-frontend' }}"
+            BACKEND_SERVICE="${{ vars.HETZNER_BACKEND_SERVICE || 'borsvy.service' }}"
+            BRANCH="${{ vars.HETZNER_BRANCH || 'main' }}"
+
+            cd "$APP_DIR"
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            cd "$APP_DIR/backend"
+            ./mvnw clean package -DskipTests
+            sudo systemctl restart "$BACKEND_SERVICE"
+
+            cd "$APP_DIR/frontend"
+            npm ci
+            npm run build
+            sudo mkdir -p "$FRONTEND_DIR"
+            sudo rsync -a --delete dist/ "$FRONTEND_DIR/"
+
+            sudo nginx -t
+            sudo systemctl reload nginx

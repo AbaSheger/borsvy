@@ -10,13 +10,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.time.Instant;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,31 +29,18 @@ public class StockController {
     private final StockService stockService;
     private final AnalysisService analysisService;
     private final Logger logger = LoggerFactory.getLogger(StockController.class);
-    private final Map<String, StockDetails> stockDetailsCache = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     @Autowired
     public StockController(StockService stockService, AnalysisService analysisService) {
         this.stockService = stockService;
         this.analysisService = analysisService;
-        // Schedule cache cleanup every hour
-        scheduler.scheduleAtFixedRate(this::cleanupCache, 1, 1, TimeUnit.HOURS);
     }
 
-    @GetMapping("/{symbol}")
+    @GetMapping({"/{symbol}", "/{symbol}/details"})
     public ResponseEntity<StockDetails> getStockDetails(@PathVariable String symbol) {
         try {
-            // Check cache first
-            StockDetails cachedDetails = stockDetailsCache.get(symbol);
-            if (cachedDetails != null) {
-                return ResponseEntity.ok(cachedDetails);
-            }
-
-            // If not in cache, fetch from service
             StockDetails details = stockService.getStockDetails(symbol);
             if (details != null) {
-                // Cache the details
-                stockDetailsCache.put(symbol, details);
                 return ResponseEntity.ok(details);
             }
             return ResponseEntity.notFound().build();
@@ -85,6 +69,35 @@ public class StockController {
         } catch (Exception e) {
             logger.error("Error fetching popular stocks: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    private static final List<String> MARKET_OVERVIEW_SYMBOLS = List.of("AAPL", "MSFT", "NVDA", "BTC");
+
+    @GetMapping("/market-overview")
+    public ResponseEntity<List<Map<String, Object>>> getMarketOverview() {
+        List<Map<String, Object>> overview = MARKET_OVERVIEW_SYMBOLS.stream()
+            .map(sym -> CompletableFuture.supplyAsync(() -> buildMarketOverviewItem(sym)))
+            .map(CompletableFuture::join)
+            .filter(item -> !item.isEmpty())
+            .collect(Collectors.toList());
+        return ResponseEntity.ok(overview);
+    }
+
+    private Map<String, Object> buildMarketOverviewItem(String symbol) {
+        try {
+            StockDetails details = stockService.getStockDetails(symbol);
+            if (details == null) return Map.of();
+
+            Map<String, Object> item = new HashMap<>();
+            item.put("symbol", symbol);
+            item.put("name", details.getName() != null ? details.getName() : symbol);
+            item.put("price", details.getPrice());
+            item.put("changePercent", details.getChangePercent());
+            return item;
+        } catch (Exception e) {
+            logger.warn("Could not fetch market overview for {}: {}", symbol, e.getMessage());
+            return Map.of();
         }
     }
 
@@ -148,8 +161,4 @@ public class StockController {
         }
     }
 
-    private void cleanupCache() {
-        stockDetailsCache.clear();
-        logger.info("Stock details cache cleared");
-    }
 }

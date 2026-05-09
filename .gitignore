@@ -5,6 +5,9 @@ node_modules/
 
 # Testing
 /coverage
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
 
 # Production
 /build

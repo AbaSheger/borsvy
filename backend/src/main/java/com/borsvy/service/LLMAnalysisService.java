@@ -2,8 +2,11 @@ package com.borsvy.service;
 
 import com.borsvy.model.Stock;
 import com.borsvy.model.StockAnalysis;
+import com.borsvy.model.StockDetails;
 import com.borsvy.model.StockPrice;
-import com.borsvy.client.PolygonClient;
+import com.borsvy.model.NewsArticle;
+import com.borsvy.client.TwelveDataClient;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -18,6 +21,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
+import java.util.ArrayList;
 import java.util.Comparator;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpMethod;
@@ -32,7 +36,7 @@ public class LLMAnalysisService implements NewsAnalysisService {
     private StockService stockService; // Changed from final to allow setter injection
     private final ObjectMapper objectMapper;
     private final TechnicalIndicatorService technicalIndicatorService;
-    private final PolygonClient polygonClient;
+    private final TwelveDataClient twelveDataClient;
     
     private static final String GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
     
@@ -44,13 +48,13 @@ public class LLMAnalysisService implements NewsAnalysisService {
     
     @Autowired
     public LLMAnalysisService(RestTemplate restTemplate, ObjectMapper objectMapper,
-                             TechnicalIndicatorService technicalIndicatorService, 
-                             PolygonClient polygonClient, 
-                             @Lazy StockService stockService) {  // Added @Lazy annotation here
+                             TechnicalIndicatorService technicalIndicatorService,
+                             TwelveDataClient twelveDataClient,
+                             @Lazy StockService stockService) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.technicalIndicatorService = technicalIndicatorService;
-        this.polygonClient = polygonClient;
+        this.twelveDataClient = twelveDataClient;
         this.stockService = stockService;
     }
     
@@ -61,19 +65,19 @@ public class LLMAnalysisService implements NewsAnalysisService {
     
     public Map<String, Object> generateAnalysis(String symbol) {
         log.info("Starting analysis for symbol: {}", symbol);
-        
+
         try {
             // Get stock data
             Stock stock = stockService.getStockBySymbol(symbol)
                 .orElseThrow(() -> new RuntimeException("Stock not found"));
-            
-            // Get price history from the PolygonClient
-            List<StockPrice> priceHistory = polygonClient.getHistoricalData(symbol, "1day");
-            
+
+            // Get price history from Twelve Data
+            List<StockPrice> priceHistory = twelveDataClient.getHistoricalData(symbol, "1m");
+
             // Calculate technical indicators
             Map<String, Object> technicalData = technicalIndicatorService.generateTechnicalAnalysis(priceHistory, symbol);
-            
-            // Add technical indicator data to the stock for backward compatibility
+
+            // Add technical indicator data to the stock
             if (technicalData.containsKey("rsi")) {
                 stock.setRsi(Double.parseDouble(technicalData.get("rsi").toString()));
             }
@@ -89,43 +93,109 @@ public class LLMAnalysisService implements NewsAnalysisService {
                     stock.setMacd(Double.parseDouble(macdData.get("macd").toString()));
                 }
             }
-            
-            log.info("Analyzing {} - Price: ${}, Change: {}%, Volume: {}", 
+
+            // Fetch StockDetails for richer context (company name, sector, PE, beta, market cap)
+            StockDetails details = null;
+            try {
+                details = stockService.getStockDetails(symbol);
+            } catch (Exception e) {
+                log.warn("Could not fetch StockDetails for {}: {}", symbol, e.getMessage());
+            }
+
+            // Fetch recent news headlines for context
+            List<NewsArticle> newsArticles = new ArrayList<>();
+            try {
+                newsArticles = stockService.getStockNews(symbol, 5);
+            } catch (Exception e) {
+                log.warn("Could not fetch news for {}: {}", symbol, e.getMessage());
+            }
+
+            log.info("Analyzing {} - Price: ${}, Change: {}%, Volume: {}",
                 symbol, stock.getPrice(), stock.getChangePercent(), stock.getVolume());
-            
-            // Create prompt for the LLM
-            String prompt = createGroqPrompt(stock);
-            
+
+            // Create prompt requesting full JSON analysis
+            String prompt = createGroqPrompt(stock, details, newsArticles);
+
             // Call Groq API
             Map<String, Object> response = callGroqApi(prompt);
-            
+
             if (response == null || response.isEmpty()) {
                 log.error("Failed to get response from Groq API");
                 throw new RuntimeException("Failed to get response from Groq API");
             }
-            
-            // Extract sentiment and confidence from the response
-            Map<String, Object> sentimentData = extractSentimentFromText((String) response.get("content"));
-            String sentiment = (String) sentimentData.get("sentiment");
-            double confidence = (double) sentimentData.get("confidence");
-            
-            // Generate analysis text
-            String analysisText = generateAnalysisText(stock, sentiment, confidence);
-            
-            // Combine all data
-            Map<String, Object> result = new HashMap<>();
-            result.put("sentiment", sentiment);
-            result.put("confidence", confidence);
-            result.put("analysis", analysisText);
+
+            // Parse JSON response
+            String content = (String) response.get("content");
+            Map<String, Object> result = parseGroqJsonResponse(content, stock);
             result.put("technical", technicalData);
-            
-            log.info("Analysis completed for {} - Sentiment: {}, Confidence: {}", symbol, sentiment, confidence);
+
+            log.info("Analysis completed for {} - Sentiment: {}, Confidence: {}",
+                symbol, result.get("sentiment"), result.get("confidence"));
             return result;
-            
+
         } catch (Exception e) {
             log.error("Error generating analysis: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to generate analysis: " + e.getMessage());
         }
+    }
+
+    /**
+     * Parses the Groq JSON response into a result map.
+     * Handles JSON wrapped in markdown code blocks.
+     */
+    private Map<String, Object> parseGroqJsonResponse(String content, Stock stock) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            // Strip markdown code fences if present
+            String json = content.trim();
+            if (json.startsWith("```")) {
+                json = json.replaceAll("^```[a-zA-Z]*\\n?", "").replaceAll("```$", "").trim();
+            }
+
+            JsonNode node = objectMapper.readTree(json);
+
+            String sentiment = node.has("sentiment") ? node.get("sentiment").asText("NEUTRAL").toUpperCase() : "NEUTRAL";
+            if (!sentiment.equals("POSITIVE") && !sentiment.equals("NEGATIVE")) sentiment = "NEUTRAL";
+
+            double confidence = node.has("confidence") ? node.get("confidence").asDouble(0.5) : 0.5;
+            confidence = Math.max(0.1, Math.min(0.95, confidence));
+
+            String summary = node.has("summary") ? node.get("summary").asText("") : "";
+            String outlook = node.has("outlook") ? node.get("outlook").asText("") : "";
+
+            List<String> bullishPoints = new ArrayList<>();
+            if (node.has("bullishPoints") && node.get("bullishPoints").isArray()) {
+                node.get("bullishPoints").forEach(n -> bullishPoints.add(n.asText()));
+            }
+
+            List<String> bearishRisks = new ArrayList<>();
+            if (node.has("bearishRisks") && node.get("bearishRisks").isArray()) {
+                node.get("bearishRisks").forEach(n -> bearishRisks.add(n.asText()));
+            }
+
+            result.put("sentiment", sentiment);
+            result.put("confidence", confidence);
+            result.put("summary", summary);
+            result.put("outlook", outlook);
+            result.put("bullishPoints", bullishPoints);
+            result.put("bearishRisks", bearishRisks);
+            // Keep "analysis" key for backward compat with AnalysisService
+            result.put("analysis", summary);
+
+        } catch (Exception e) {
+            log.error("Failed to parse Groq JSON response, falling back to local analysis: {}", e.getMessage());
+            // Fallback: local sentiment determination
+            String sentiment = determineLocalSentiment(stock);
+            double confidence = calculateDynamicConfidence(stock, sentiment);
+            result.put("sentiment", sentiment);
+            result.put("confidence", confidence);
+            result.put("summary", "Analysis unavailable. Technical indicators suggest a " + sentiment.toLowerCase() + " outlook.");
+            result.put("outlook", "Monitor the stock for clearer signals.");
+            result.put("bullishPoints", new ArrayList<>());
+            result.put("bearishRisks", new ArrayList<>());
+            result.put("analysis", "");
+        }
+        return result;
     }
     
     /**
@@ -267,60 +337,88 @@ public class LLMAnalysisService implements NewsAnalysisService {
     }
     
     /**
-     * Creates a prompt for the Groq LLM to analyze stock sentiment
-     * Optimized for the llama-3.3-70b-versatile model
+     * Creates a prompt for Groq requesting a full structured JSON analysis.
      */
-    private String createGroqPrompt(Stock stock) {
+    private String createGroqPrompt(Stock stock, StockDetails details, List<NewsArticle> newsArticles) {
         StringBuilder prompt = new StringBuilder();
-        
-        // Better formatting for llama-3.3-70b-versatile
-        prompt.append("You are a financial analyst assistant specialized in stock market sentiment analysis. ");
-        prompt.append("Analyze the sentiment for this stock based on the following market data.\n\n");
-        
-        // The specific instruction with format requirements
-        prompt.append("IMPORTANT: Your response must follow this exact format:\n");
-        prompt.append("SENTIMENT:[SENTIMENT] CONFIDENCE:[CONFIDENCE]\n");
-        prompt.append("where [SENTIMENT] is exactly one of: POSITIVE, NEGATIVE, or NEUTRAL\n");
-        prompt.append("and [CONFIDENCE] is a number between 0 and 1 representing your confidence level.\n\n");
-        
-        // Sample format to show the model
-        prompt.append("Example correct response: SENTIMENT:POSITIVE CONFIDENCE:0.85\n\n");
-        
-        // Stock data with clear structure
+
+        prompt.append("You are a senior financial analyst. Analyze this stock and respond ONLY with valid JSON.\n\n");
+        prompt.append("Required JSON schema (respond with ONLY this JSON object, no markdown, no code blocks):\n");
+        prompt.append("{\n");
+        prompt.append("  \"sentiment\": \"POSITIVE\" or \"NEGATIVE\" or \"NEUTRAL\",\n");
+        prompt.append("  \"confidence\": <number 0.0-1.0>,\n");
+        prompt.append("  \"summary\": \"<2-3 paragraphs of specific analysis that references the actual numbers provided>\",\n");
+        prompt.append("  \"bullishPoints\": [\"<specific bullish signal 1>\", \"<specific bullish signal 2>\", \"<specific bullish signal 3>\"],\n");
+        prompt.append("  \"bearishRisks\": [\"<specific risk 1>\", \"<specific risk 2>\"],\n");
+        prompt.append("  \"outlook\": \"<one sentence short-term outlook>\"\n");
+        prompt.append("}\n\n");
+
         prompt.append("==== STOCK DATA ====\n");
         prompt.append("Symbol: ").append(stock.getSymbol()).append("\n");
+
+        if (details != null && details.getName() != null) {
+            prompt.append("Company: ").append(details.getName()).append("\n");
+        }
+        if (details != null && details.getIndustry() != null) {
+            prompt.append("Industry: ").append(details.getIndustry()).append("\n");
+        }
+
         prompt.append("Current Price: $").append(String.format("%.2f", stock.getPrice())).append("\n");
-        prompt.append("Percent Change Today: ").append(String.format("%.2f", stock.getChangePercent())).append("%\n");
-        prompt.append("Trading Volume: ").append(formatNumber(stock.getVolume())).append("\n");
-        
-        // Add technical indicators with explanations when available
+        prompt.append("Change Today: ").append(String.format("%+.2f%%", stock.getChangePercent())).append("\n");
+        prompt.append("Volume: ").append(formatNumber(stock.getVolume())).append("\n");
+
+        if (details != null && details.getMarketCap() != null && details.getMarketCap() > 0) {
+            // marketCap from StockDetails is in millions
+            double capInB = details.getMarketCap() / 1000.0;
+            if (capInB >= 1000) {
+                prompt.append("Market Cap: $").append(String.format("%.2f", capInB / 1000.0)).append(" T\n");
+            } else {
+                prompt.append("Market Cap: $").append(String.format("%.2f", capInB)).append(" B\n");
+            }
+        }
+        if (details != null && details.getPeRatio() != null && details.getPeRatio() > 0) {
+            prompt.append("P/E Ratio: ").append(String.format("%.2f", details.getPeRatio())).append("\n");
+        }
+        if (details != null && details.getBeta() != null && details.getBeta() != 0) {
+            prompt.append("Beta: ").append(String.format("%.2f", details.getBeta())).append("\n");
+        }
+
         if (stock.getRsi() > 0) {
-            prompt.append("RSI: ").append(String.format("%.2f", stock.getRsi()))
+            prompt.append("RSI: ").append(String.format("%.1f", stock.getRsi()))
                   .append(" (>70 overbought, <30 oversold)\n");
         }
-        
         if (stock.getMacd() != 0) {
-            prompt.append("MACD: ").append(String.format("%.2f", stock.getMacd()))
-                  .append(" (positive: bullish, negative: bearish)\n");
+            prompt.append("MACD: ").append(String.format("%.4f", stock.getMacd()))
+                  .append(stock.getMacd() > 0 ? " (bullish)" : " (bearish)").append("\n");
         }
-        
         if (stock.getSma20() > 0) {
-            double priceTo20SMA = ((stock.getPrice() / stock.getSma20()) - 1) * 100;
-            prompt.append("20-day SMA: ").append(String.format("%.2f", stock.getSma20()))
-                  .append(" (price ").append(priceTo20SMA > 0 ? "above" : "below").append(" by ")
-                  .append(String.format("%.2f%%", Math.abs(priceTo20SMA))).append(")\n");
+            double pct = ((stock.getPrice() / stock.getSma20()) - 1) * 100;
+            prompt.append("SMA20: $").append(String.format("%.2f", stock.getSma20()))
+                  .append(" (price ").append(pct > 0 ? "above" : "below")
+                  .append(" by ").append(String.format("%.1f%%", Math.abs(pct))).append(")\n");
         }
-        
         if (stock.getSma50() > 0) {
-            double priceTo50SMA = ((stock.getPrice() / stock.getSma50()) - 1) * 100;
-            prompt.append("50-day SMA: ").append(String.format("%.2f", stock.getSma50()))
-                  .append(" (price ").append(priceTo50SMA > 0 ? "above" : "below").append(" by ")
-                  .append(String.format("%.2f%%", Math.abs(priceTo50SMA))).append(")\n");
+            double pct = ((stock.getPrice() / stock.getSma50()) - 1) * 100;
+            prompt.append("SMA50: $").append(String.format("%.2f", stock.getSma50()))
+                  .append(" (price ").append(pct > 0 ? "above" : "below")
+                  .append(" by ").append(String.format("%.1f%%", Math.abs(pct))).append(")\n");
         }
-        
-        // Final instruction to ensure proper response format
-        prompt.append("\nBased on this data, provide ONLY the sentiment (POSITIVE, NEGATIVE, or NEUTRAL) and confidence score. Nothing else.");
-        
+
+        if (newsArticles != null && !newsArticles.isEmpty()) {
+            prompt.append("\n==== RECENT NEWS ====\n");
+            int count = 0;
+            for (NewsArticle article : newsArticles) {
+                if (count >= 5) break;
+                prompt.append(count + 1).append(". ").append(article.getTitle());
+                if (article.getPublishedDate() != null) {
+                    prompt.append(" [").append(article.getPublishedDate()).append("]");
+                }
+                prompt.append("\n");
+                count++;
+            }
+        }
+
+        prompt.append("\nRespond with ONLY the JSON object. No explanation, no markdown, no code blocks.");
         return prompt.toString();
     }
     
@@ -375,12 +473,10 @@ public class LLMAnalysisService implements NewsAnalysisService {
                 // Extract confidence
                 int confidenceStart = upperText.indexOf("CONFIDENCE:") + 11;
                 int confidenceEnd = upperText.indexOf("\n", confidenceStart);
-                if (confidenceEnd == -1) {
-                    // If newline not found, try looking for space
-                    confidenceEnd = upperText.indexOf(" ", confidenceStart);
-                }
-                
-                if (confidenceEnd != -1) {
+                if (confidenceEnd == -1) confidenceEnd = upperText.indexOf(" ", confidenceStart);
+                if (confidenceEnd == -1) confidenceEnd = upperText.length(); // value at end of string
+
+                if (confidenceEnd > confidenceStart) {
                     try {
                         String confidenceStr = upperText.substring(confidenceStart, confidenceEnd).trim();
                         confidence = Double.parseDouble(confidenceStr);
@@ -518,69 +614,6 @@ public class LLMAnalysisService implements NewsAnalysisService {
         return Math.max(0.1, Math.min(0.9, confidence));
     }
     
-    private String generateAnalysisText(Stock stock, String sentiment, Double confidence) {
-        StringBuilder analysis = new StringBuilder();
-        
-        // Add sentiment analysis
-        analysis.append("Based on the current market data, the sentiment is ");
-        analysis.append(sentiment).append(" with ");
-        analysis.append(String.format("%.1f", confidence * 100)).append("% confidence.\n\n");
-        
-        // Add price movement analysis
-        if (stock.getPrice() > 0) {
-            analysis.append("Price Movement:\n");
-            analysis.append("Current Price: $").append(stock.getPrice()).append("\n");
-            analysis.append("Change: ").append(stock.getChangePercent()).append("%\n");
-            
-            if (stock.getChangePercent() > 0) {
-                analysis.append("The stock is showing positive momentum.\n");
-            } else if (stock.getChangePercent() < 0) {
-                analysis.append("The stock is showing negative momentum.\n");
-            } else {
-                analysis.append("The stock price is stable.\n");
-            }
-        }
-        
-        // Add volume analysis
-        if (stock.getVolume() > 0) {
-            analysis.append("\nVolume Analysis:\n");
-            analysis.append("Current Volume: ").append(stock.getVolume()).append("\n");
-            
-            if (stock.getVolume() > 1000000) {
-                analysis.append("High trading volume indicates strong market interest.\n");
-            } else if (stock.getVolume() > 100000) {
-                analysis.append("Moderate trading volume suggests normal market activity.\n");
-            } else {
-                analysis.append("Low trading volume may indicate limited market interest.\n");
-            }
-        }
-        
-        // Add technical indicators
-        analysis.append("\nTechnical Indicators:\n");
-        if (stock.getMacd() != 0) {
-            analysis.append("MACD: ").append(stock.getMacd() > 0 ? "Bullish" : "Bearish").append("\n");
-        }
-        if (stock.getRsi() > 0) {
-            analysis.append("RSI: ").append(stock.getRsi()).append("\n");
-            if (stock.getRsi() > 70) {
-                analysis.append("RSI indicates overbought conditions.\n");
-            } else if (stock.getRsi() < 30) {
-                analysis.append("RSI indicates oversold conditions.\n");
-            }
-        }
-        
-        // Add recommendation
-        analysis.append("\nRecommendation:\n");
-        if (sentiment.equals("POSITIVE") && confidence > 0.7) {
-            analysis.append("Consider buying or holding the stock.\n");
-        } else if (sentiment.equals("NEGATIVE") && confidence > 0.7) {
-            analysis.append("Consider selling or avoiding the stock.\n");
-        } else {
-            analysis.append("Monitor the stock for clearer signals.\n");
-        }
-        
-        return analysis.toString();
-    }
     
     /**
      * Analyzes sentiment of news articles using LLM

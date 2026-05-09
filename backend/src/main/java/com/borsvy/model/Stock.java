@@ -16,6 +16,7 @@ public class Stock {
     private String symbol;
     
     private String name;
+    private String type;
     private String industry;
     private double price;
     private double change;

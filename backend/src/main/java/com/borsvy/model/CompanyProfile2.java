@@ -69,6 +69,7 @@ public class CompanyProfile2 {
     }
 
     public double getMarketCapitalization() {
+        if (marketCapitalization == null || marketCapitalization.isEmpty()) return 0.0;
         try {
             return Double.parseDouble(marketCapitalization);
         } catch (NumberFormatException e) {

@@ -16,7 +16,7 @@ const POPULAR_STOCKS = [
   { symbol: 'TSLA', name: 'Tesla Inc.' },
   { symbol: 'META', name: 'Meta Platforms Inc.' },
   { symbol: 'NVDA', name: 'NVIDIA Corp.' },
-  { symbol: 'BTC-USD', name: 'Bitcoin USD' },
+  { symbol: 'BTC', name: 'Bitcoin' },
 ];
 
 const StockSearch = ({ onSearch, isLoading, onToggleFavorite, favorites = [] }) => {
@@ -77,7 +77,7 @@ const StockSearch = ({ onSearch, isLoading, onToggleFavorite, favorites = [] }) 
 
       try {
         // Changed from "q" to "query" to match backend API
-        const response = await axios.get(`/api/stocks/autocomplete?query=${encodeURIComponent(debouncedSearchTerm.trim())}`, axiosConfig);
+        const response = await axios.get(`/api/stocks/search?query=${encodeURIComponent(debouncedSearchTerm.trim())}`, axiosConfig);
         setSuggestions(response.data || []);
       } catch (err) {
         console.error('Autocomplete error:', err);

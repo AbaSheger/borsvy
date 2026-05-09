@@ -1,75 +1,91 @@
-import PropTypes from 'prop-types';
+import { useNavigate } from 'react-router-dom';
+import { Popconfirm } from 'antd';
+import { DeleteOutlined, LineChartOutlined, StarFilled } from '@ant-design/icons';
+import axios from 'axios';
+import { message } from 'antd';
+import { axiosConfig } from '../config';
 import { useTheme } from '../context/ThemeContext';
 
-function Favorites({ favorites, onSelectStock, onToggleFavorite }) {
+const Favorites = ({ favorites = [], onToggleFavorite, loading }) => {
+  const navigate = useNavigate();
   const { theme } = useTheme();
-  
-  // Better handling of empty, null, or undefined favorites array
-  if (!favorites || !Array.isArray(favorites) || favorites.length === 0) {
+  const dark = theme === 'dark';
+
+  const removeFavorite = async (symbol) => {
+    try {
+      await axios.delete(`/api/favorites/${symbol}`, axiosConfig);
+      message.success(`${symbol} removed from favorites`);
+      onToggleFavorite?.();
+    } catch {
+      message.error('Failed to remove favorite');
+    }
+  };
+
+  const card = dark
+    ? 'bg-[#111111] border border-[#222222] rounded-2xl'
+    : 'bg-white border border-slate-200 rounded-2xl';
+
+  if (!favorites.length) {
     return (
-      <div className={`${theme === 'dark' ? 'bg-[#1a1a1a] border-[#333333] text-[#e6e6e6]' : 'bg-white border-gray-200 text-gray-800'} rounded-xl p-6 border shadow-sm`}>
-        <p className="text-center font-medium">No favorite stocks yet</p>
-        <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} text-center text-sm mt-2`}>Add stocks to your favorites for quick access</p>
+      <div className={`${card} p-12 text-center`}>
+        <StarFilled className="text-3xl text-zinc-600 mb-3" />
+        <p className={`font-medium mb-1 ${dark ? 'text-zinc-300' : 'text-slate-700'}`}>No favorites yet</p>
+        <p className={`text-sm ${dark ? 'text-zinc-500' : 'text-slate-400'}`}>
+          Search for stocks and star them to add to your watchlist
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {favorites.map((stock) => {
-        // Null safety with default values
-        const symbol = stock?.symbol || 'Unknown';
-        const name = stock?.name || 'Unknown Company';
-        const price = typeof stock?.price === 'number' ? stock.price : 0;
-        const change = typeof stock?.change === 'number' ? stock.change : 0;
-        const changePercent = typeof stock?.changePercent === 'number' ? stock.changePercent : 0;
-        
+    <div className="max-w-3xl mx-auto space-y-3">
+      <h1 className={`text-2xl font-bold mb-5 flex items-center gap-2 ${dark ? 'text-zinc-100' : 'text-slate-800'}`}>
+        <StarFilled className="text-yellow-400" /> Watchlist
+        <span className={`text-base font-normal ${dark ? 'text-zinc-500' : 'text-slate-400'}`}>
+          ({favorites.length})
+        </span>
+      </h1>
+
+      {favorites.map(stock => {
+        const pos = (stock.changePercent ?? 0) >= 0;
         return (
-          <div
-            key={symbol}
-            className={`${theme === 'dark' ? 'bg-[#1a1a1a] border-[#333333]' : 'bg-white border-gray-200'} rounded-xl border p-4 hover:border-blue-500 
-                     hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300 cursor-pointer`}
-            onClick={() => onSelectStock(stock)}
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className={`text-lg font-bold ${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'}`}>{symbol}</h3>
-                <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'} font-medium`}>{name}</p>
+          <div key={stock.symbol}
+            className={`${card} p-4 flex items-center justify-between gap-4 hover:border-blue-500/40 transition-colors`}>
+            <button
+              onClick={() => navigate(`/analysis/${stock.symbol}`)}
+              className="flex items-center gap-4 flex-1 text-left min-w-0">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`font-bold ${dark ? 'text-zinc-100' : 'text-slate-800'}`}>{stock.symbol}</span>
+                  <LineChartOutlined className="text-blue-400 text-xs" />
+                </div>
+                <p className={`text-xs truncate ${dark ? 'text-zinc-500' : 'text-slate-400'}`}>{stock.name}</p>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleFavorite(stock);
-                }}
-                className="text-red-500 hover:text-red-600 p-1 transition-colors duration-300"
-                aria-label={`Remove ${symbol} from favorites`}
-              >
-                ❤️
+            </button>
+
+            <div className="text-right flex-shrink-0">
+              <div className={`font-bold tabular-nums ${dark ? 'text-zinc-100' : 'text-slate-800'}`}>
+                ${(stock.price ?? 0).toFixed(2)}
+              </div>
+              <div className={`text-xs font-semibold ${pos ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {pos ? '+' : ''}{(stock.changePercent ?? 0).toFixed(2)}%
+              </div>
+            </div>
+
+            <Popconfirm
+              title="Remove from favorites?"
+              onConfirm={() => removeFavorite(stock.symbol)}
+              okText="Remove"
+              cancelText="Cancel">
+              <button className={`text-zinc-500 hover:text-rose-400 transition-colors p-1`}>
+                <DeleteOutlined />
               </button>
-            </div>
-            <div className="flex justify-between items-center mt-3">
-              <span className={`text-xl font-bold ${theme === 'dark' ? 'text-[#e6e6e6]' : 'text-gray-800'}`}>${price.toFixed(2)}</span>
-              <div className={`px-3 py-1 rounded-full text-sm font-bold ${
-                change >= 0 
-                  ? 'bg-green-500/10 text-green-400' 
-                  : 'bg-red-500/10 text-red-400'
-              }`}>
-                <span>{change >= 0 ? '↑' : '↓'}</span>
-                <span>{Math.abs(change).toFixed(2)}</span>
-                <span> ({changePercent.toFixed(2)}%)</span>
-              </div>
-            </div>
+            </Popconfirm>
           </div>
         );
       })}
     </div>
   );
-}
-
-Favorites.propTypes = {
-  favorites: PropTypes.array,
-  onSelectStock: PropTypes.func.isRequired,
-  onToggleFavorite: PropTypes.func.isRequired
 };
 
 export default Favorites;

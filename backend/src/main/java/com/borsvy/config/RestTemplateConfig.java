@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.retry.backoff.ExponentialBackOffPolicy;
@@ -31,10 +32,12 @@ public class RestTemplateConfig {
     private static final Logger logger = LoggerFactory.getLogger(RestTemplateConfig.class);
 
     @Bean
-    public RestTemplate restTemplate(RestTemplateBuilder builder) {
+    public RestTemplate restTemplate(RestTemplateBuilder builder,
+                                     @Value("${external-api.connect-timeout-ms:3000}") long connectTimeoutMs,
+                                     @Value("${external-api.read-timeout-ms:5000}") long readTimeoutMs) {
         return builder
-            .setConnectTimeout(Duration.ofSeconds(10))
-            .setReadTimeout(Duration.ofSeconds(10))
+            .setConnectTimeout(Duration.ofMillis(connectTimeoutMs))
+            .setReadTimeout(Duration.ofMillis(readTimeoutMs))
             .build();
     }
     

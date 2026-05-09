@@ -3,6 +3,17 @@ import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.js'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/components/**', 'src/pages/**', 'src/context/**', 'src/hooks/**'],
+      exclude: ['src/test/**', 'src/main.jsx'],
+    },
+  },
   plugins: [react()],
   base: '/',  // Use absolute paths
   server: {
@@ -18,8 +29,7 @@ export default defineConfig({
   },
   preview: {
     port: 3000,
-    host: '0.0.0.0',
-    allowedHosts: ['.koyeb.app']
+    host: '0.0.0.0'
   },
   build: {
     outDir: 'dist',

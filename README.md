@@ -164,7 +164,6 @@ graph LR
 
 - Node.js (v18 or higher)
 - Java 17 or higher
-- Docker (optional, for containerized deployment)
 - API Keys (see below)
 
 ## Running the Application
@@ -235,6 +234,42 @@ The deployment includes:
 - Automatic service recovery via systemd
 - Log rotation to manage disk usage
 - HTTP to HTTPS redirection
+
+### Automatic Deploys from GitHub
+
+The repo includes a GitHub Actions workflow at `.github/workflows/deploy-hetzner.yml`.
+
+On every push to `main`, the workflow:
+1. Installs frontend dependencies.
+2. Builds the frontend.
+3. Runs Playwright e2e tests.
+4. Compiles the backend.
+5. SSHs into the Hetzner VPS.
+6. Pulls the latest `main` branch.
+7. Builds the backend jar.
+8. Restarts the backend systemd service.
+9. Builds the frontend and syncs `frontend/dist` to the Nginx web root.
+10. Validates and reloads Nginx.
+
+Required GitHub repository secrets:
+
+```text
+HETZNER_HOST       # VPS hostname or IP
+HETZNER_USER       # SSH user
+HETZNER_SSH_KEY    # Private SSH key with access to the VPS
+HETZNER_SSH_PORT   # Optional; defaults to 22
+```
+
+Optional GitHub repository variables:
+
+```text
+HETZNER_APP_DIR          # Defaults to /var/www/borsvy
+HETZNER_FRONTEND_DIR     # Defaults to /var/www/borsvy-frontend
+HETZNER_BACKEND_SERVICE  # Defaults to borsvy.service
+HETZNER_BRANCH           # Defaults to main
+```
+
+The VPS should already have Node.js 18, Java 17, Maven wrapper support, Git, rsync, Nginx, and the backend systemd service configured. Production secrets such as database credentials and API keys should stay on the VPS in the systemd environment or environment file, not in GitHub Actions.
 
 ### Environment Variables (for Production Deployment)
 

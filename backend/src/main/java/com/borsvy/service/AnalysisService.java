@@ -22,7 +22,7 @@ import java.util.ArrayList;
 import java.util.Random;
 import java.util.stream.Collectors;
 
-import com.borsvy.client.PolygonClient;
+import com.borsvy.client.TwelveDataClient;
 import com.borsvy.model.StockPrice;
 import com.borsvy.model.NewsArticle;
 import java.util.concurrent.CompletableFuture;
@@ -40,7 +40,7 @@ public class AnalysisService {
     private final StockService stockService;
     private final StockAnalysisRepository analysisRepository;
     private final LLMAnalysisService llmAnalysisService;
-    private final PolygonClient polygonClient;
+    private final TwelveDataClient twelveDataClient;
     
     // In-memory cache for analysis results
     private final Map<String, Map<String, Object>> analysisCache = new ConcurrentHashMap<>();
@@ -48,14 +48,13 @@ public class AnalysisService {
     private static final int CACHE_DURATION_MINUTES = 30; // Cache duration in minutes
     
     @Autowired
-    public AnalysisService(StockService stockService, StockAnalysisRepository analysisRepository, LLMAnalysisService llmAnalysisService, PolygonClient polygonClient) {
+    public AnalysisService(StockService stockService, StockAnalysisRepository analysisRepository, LLMAnalysisService llmAnalysisService, TwelveDataClient twelveDataClient) {
         this.stockService = stockService;
         this.analysisRepository = analysisRepository;
         this.llmAnalysisService = llmAnalysisService;
-        this.polygonClient = polygonClient;
+        this.twelveDataClient = twelveDataClient;
     }
     
-    @Cacheable(value = "analysis", key = "#symbol")
     public Map<String, Object> getCompleteAnalysis(String symbol) {
         Map<String, Object> analysis = new HashMap<>();
         try {
@@ -87,7 +86,18 @@ public class AnalysisService {
             
             Stock stock = stockOpt.get();
             analysis.put("stock", stock);
-            
+
+            // Promote key stock fields to top level (frontend reads them directly)
+            analysis.put("price", stock.getPrice());
+            analysis.put("change", stock.getChange());
+            analysis.put("changePercent", stock.getChangePercent());
+            analysis.put("name", stock.getName());
+            analysis.put("industry", stock.getIndustry());
+            analysis.put("marketCap", stock.getMarketCap());
+            analysis.put("peRatio", stock.getPeRatio());
+            analysis.put("high52Week", stock.getHigh52Week());
+            analysis.put("low52Week", stock.getLow52Week());
+
             // Get news sentiment
             Map<String, Object> sentimentData = stockService.getNewsSentiment(symbol);
             analysis.put("newsSentiment", sentimentData);
@@ -95,6 +105,8 @@ public class AnalysisService {
             // Get LLM analysis
             Map<String, Object> llmAnalysis = llmAnalysisService.generateAnalysis(symbol);
             analysis.put("llmAnalysis", llmAnalysis);
+            // Also expose under "llm" key — used directly by AnalysisVisualization frontend component
+            analysis.put("llm", llmAnalysis);
             
             // Get technical analysis
             Map<String, Object> technicalAnalysis = getTechnicalAnalysis(stock);
@@ -123,6 +135,11 @@ public class AnalysisService {
             // Combine all analyses into a comprehensive summary
             String summary = generateComprehensiveSummary(technicalAnalysis, fundamentalAnalysis, llmAnalysis);
             analysis.put("summary", summary);
+
+            // Promote LLM structured fields to top-level for easy frontend access
+            if (llmAnalysis.containsKey("bullishPoints")) analysis.put("bullishPoints", llmAnalysis.get("bullishPoints"));
+            if (llmAnalysis.containsKey("bearishRisks")) analysis.put("bearishRisks", llmAnalysis.get("bearishRisks"));
+            if (llmAnalysis.containsKey("outlook")) analysis.put("outlook", llmAnalysis.get("outlook"));
             
             // Add overall sentiment
             Map<String, Object> overallSentiment = determineOverallSentiment(technicalAnalysis, fundamentalAnalysis, llmAnalysis);
@@ -140,6 +157,68 @@ public class AnalysisService {
         }
         
         return analysis;
+    }
+
+    public Map<String, Object> getAiAnalysis(String symbol) {
+        Map<String, Object> analysis = new HashMap<>();
+        try {
+            if (symbol == null || symbol.trim().isEmpty() || symbol.equals("undefined")) {
+                analysis.put("error", "Invalid stock symbol");
+                return analysis;
+            }
+
+            Optional<Stock> stockOpt = stockService.getStockBySymbol(symbol);
+            if (stockOpt.isEmpty()) {
+                analysis.put("error", "Stock not found");
+                return analysis;
+            }
+
+            Stock stock = stockOpt.get();
+            Map<String, Object> llmAnalysis = llmAnalysisService.generateAnalysis(symbol);
+            Map<String, Object> technicalAnalysis = getTechnicalAnalysis(stock);
+            Map<String, Object> fundamentalAnalysis = getFundamentalAnalysis(stock);
+
+            analysis.put("stock", stock);
+            analysis.put("price", stock.getPrice());
+            analysis.put("change", stock.getChange());
+            analysis.put("changePercent", stock.getChangePercent());
+            analysis.put("name", stock.getName());
+            analysis.put("industry", stock.getIndustry());
+            analysis.put("marketCap", stock.getMarketCap());
+            analysis.put("peRatio", stock.getPeRatio());
+            analysis.put("high52Week", stock.getHigh52Week());
+            analysis.put("low52Week", stock.getLow52Week());
+            analysis.put("llmAnalysis", llmAnalysis);
+            analysis.put("llm", llmAnalysis);
+            analysis.put("technical", technicalAnalysis);
+            analysis.put("fundamental", fundamentalAnalysis);
+            analysis.put("summary", generateComprehensiveSummary(technicalAnalysis, fundamentalAnalysis, llmAnalysis));
+
+            if (llmAnalysis.containsKey("bullishPoints")) analysis.put("bullishPoints", llmAnalysis.get("bullishPoints"));
+            if (llmAnalysis.containsKey("bearishRisks")) analysis.put("bearishRisks", llmAnalysis.get("bearishRisks"));
+            if (llmAnalysis.containsKey("outlook")) analysis.put("outlook", llmAnalysis.get("outlook"));
+            analysis.put("overallSentiment", determineOverallSentiment(technicalAnalysis, fundamentalAnalysis, llmAnalysis));
+        } catch (Exception e) {
+            log.error("Error generating AI analysis for {}: {}", symbol, e.getMessage(), e);
+            analysis.put("error", "Failed to generate AI analysis: " + e.getMessage());
+        }
+
+        return analysis;
+    }
+
+    public List<Map<String, Object>> getRecentNews(String symbol, int limit) {
+        return stockService.getStockNews(symbol, limit).stream()
+            .map(article -> {
+                Map<String, Object> articleMap = new HashMap<>();
+                articleMap.put("title", article.getTitle());
+                articleMap.put("url", article.getUrl());
+                articleMap.put("date", article.getPublishedDate());
+                articleMap.put("thumbnail", article.getThumbnail());
+                articleMap.put("source", article.getSource());
+                articleMap.put("summary", article.getSummary());
+                return articleMap;
+            })
+            .collect(Collectors.toList());
     }
     
     // Scheduled task to clean up old cache entries
@@ -170,7 +249,7 @@ public class AnalysisService {
         Map<String, Object> analysis = new HashMap<>();
         try {
             // Use the TechnicalIndicatorService to get the analysis
-            List<StockPrice> priceHistory = polygonClient.getHistoricalData(stock.getSymbol(), "1day");
+            List<StockPrice> priceHistory = twelveDataClient.getHistoricalData(stock.getSymbol(), "1day");
             if (priceHistory == null || priceHistory.isEmpty()) {
                 analysis.put("error", "No price history available");
                 return analysis;
@@ -233,32 +312,25 @@ public class AnalysisService {
     }
     
     private String generateComprehensiveSummary(Map<String, Object> technical, Map<String, Object> fundamental, Object llmAnalysis) {
-        StringBuilder summary = new StringBuilder();
-        
-        // Add LLM analysis
+        // Prefer the LLM-generated narrative summary if available
         if (llmAnalysis instanceof Map) {
             Map<?, ?> llmMap = (Map<?, ?>) llmAnalysis;
-            if (llmMap.containsKey("analysis")) {
-                summary.append("AI Analysis:\n").append(llmMap.get("analysis")).append("\n\n");
+            Object llmSummary = llmMap.get("summary");
+            if (llmSummary instanceof String && !((String) llmSummary).isEmpty()) {
+                return (String) llmSummary;
             }
         }
-        
-        // Add technical analysis summary
-        if (technical.containsKey("trend") && technical.containsKey("signals")) {
-            summary.append("Technical Analysis:\n");
-            summary.append("Current Trend: ").append(technical.get("trend")).append("\n");
-            Map<String, String> signals = (Map<String, String>) technical.get("signals");
-            signals.forEach((key, value) -> summary.append(key).append(": ").append(value).append("\n"));
-            summary.append("\n");
+
+        // Fallback: build a brief summary from technical/fundamental signals
+        StringBuilder summary = new StringBuilder();
+        if (technical.containsKey("trend")) {
+            summary.append("Technical trend: ").append(technical.get("trend")).append(". ");
         }
-        
-        // Add fundamental analysis summary
         if (fundamental.containsKey("signals")) {
-            summary.append("Fundamental Analysis:\n");
-            Map<String, String> signals = (Map<String, String>) fundamental.get("signals");
-            signals.forEach((key, value) -> summary.append(key).append(": ").append(value).append("\n"));
+            Map<?, ?> signals = (Map<?, ?>) fundamental.get("signals");
+            Object valuation = signals.get("Valuation");
+            if (valuation != null) summary.append("Valuation: ").append(valuation).append(".");
         }
-        
         return summary.toString();
     }
     
@@ -567,7 +639,7 @@ public class AnalysisService {
 
         try {
             // Get historical data from Polygon API
-            List<StockPrice> priceData = polygonClient.getHistoricalData(symbol, interval);
+            List<StockPrice> priceData = twelveDataClient.getHistoricalData(symbol, interval);
 
             if (priceData.isEmpty()) {
                 // If no data from Polygon, try to generate mock data
@@ -580,6 +652,9 @@ public class AnalysisService {
                     Map<String, Object> point = new HashMap<>();
                     point.put("timestamp", price.getTimestamp().toString());
                     point.put("price", price.getPrice());
+                    point.put("open", price.getOpen() > 0 ? price.getOpen() : price.getPrice());
+                    point.put("high", price.getHigh() > 0 ? price.getHigh() : price.getPrice());
+                    point.put("low", price.getLow() > 0 ? price.getLow() : price.getPrice());
                     point.put("volume", price.getVolume());
                     return point;
                 })
@@ -623,9 +698,15 @@ public class AnalysisService {
         Random random = new Random();
         
         while (startDate.isBefore(endDate)) {
+            double close = basePrice + random.nextDouble() * 10 - 5;
+            double open = close + random.nextDouble() * 4 - 2;
             Map<String, Object> point = new HashMap<>();
             point.put("timestamp", startDate.toString());
-            point.put("price", basePrice + random.nextDouble() * 10 - 5); // Random price ±5 from base
+            point.put("price", close);
+            point.put("open", open);
+            point.put("high", Math.max(open, close) + random.nextDouble() * 2);
+            point.put("low", Math.min(open, close) - random.nextDouble() * 2);
+            point.put("volume", (long)(1_000_000 + random.nextDouble() * 9_000_000));
             mockData.add(point);
             
             // Increment based on interval

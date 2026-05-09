@@ -1,39 +1,65 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Layout, Menu, message } from 'antd';
-import { HomeOutlined, StarOutlined, LineChartOutlined, MenuOutlined, CloseOutlined } from '@ant-design/icons';
+import { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Avatar, Button, Dropdown, Layout, Menu, message } from 'antd';
+import {
+  BellOutlined,
+  CloseOutlined,
+  CrownOutlined,
+  FundOutlined,
+  HomeOutlined,
+  LogoutOutlined,
+  MenuOutlined,
+  RiseOutlined,
+  SearchOutlined,
+  StarOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
 import axios from 'axios';
 import { axiosConfig } from './config';
-import StockSearch from './components/StockSearch';
-import StockList from './components/StockList';
 import Favorites from './components/Favorites';
 import Analysis from './components/Analysis';
-import WelcomeScreen from './components/WelcomeScreen';
 import StockChart from './components/StockChart';
 import ThemeToggle from './components/ThemeToggle';
+import DashboardPage from './pages/DashboardPage';
+import SearchPage from './pages/SearchPage';
+import PortfolioPage from './pages/PortfolioPage';
+import AlertsPage from './pages/AlertsPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ProfilePage from './pages/ProfilePage';
 import './App.css';
-import { API_URL } from './config';
 import { useTheme } from './context/ThemeContext';
+import { useAuth } from './context/AuthContext';
 
 const { Header, Content, Sider } = Layout;
 
-// Define router future flags to suppress warnings
 const routerFutureConfig = {
   v7_startTransition: true,
-  v7_relativeSplatPath: true
+  v7_relativeSplatPath: true,
 };
 
-// Navigation component for sidebar
-const SidebarNavigation = ({ collapsed, onClose }) => {
+const pageMeta = {
+  '/': ['Dashboard', 'Live market overview and watchlist'],
+  '/search': ['Research', 'Search assets and open an analysis workspace'],
+  '/favorites': ['Watchlist', 'Saved symbols and quick price checks'],
+  '/portfolio': ['Portfolio', 'Track holdings, allocation, and return'],
+  '/alerts': ['Alerts', 'Manage price conditions and notifications'],
+  '/login': ['Sign in', 'Access your workspace'],
+  '/register': ['Create account', 'Start a BorsVy workspace'],
+  '/profile': ['Profile', 'Account and plan settings'],
+};
+
+const SidebarNavigation = () => {
   const location = useLocation();
-  const pathName = location.pathname;
   const { theme } = useTheme();
-  
+
   const getSelectedKeys = () => {
-    if (pathName === '/') return ['home'];
-    if (pathName === '/favorites') return ['favorites'];
-    if (pathName.includes('/analysis')) return ['analysis'];
-    if (pathName.includes('/chart')) return ['chart'];
+    if (location.pathname === '/') return ['home'];
+    if (location.pathname === '/search') return ['search'];
+    if (location.pathname === '/favorites') return ['favorites'];
+    if (location.pathname === '/portfolio') return ['portfolio'];
+    if (location.pathname === '/alerts') return ['alerts'];
+    if (location.pathname.includes('/analysis')) return ['analysis'];
     return [];
   };
 
@@ -42,110 +68,86 @@ const SidebarNavigation = ({ collapsed, onClose }) => {
       theme={theme}
       mode="inline"
       selectedKeys={getSelectedKeys()}
-      className={`${theme === 'dark' ? 'bg-[#1a1a1a] border-r border-[#333333]' : 'bg-white border-r border-gray-200'}`}
+      className={theme === 'dark' ? 'bg-transparent border-0 px-0 py-3' : 'bg-white border-0 px-0 py-3'}
       items={[
-        {
-          key: 'home',
-          icon: <HomeOutlined />,
-          label: <Link to="/">Home</Link>,
-        },
-        {
-          key: 'favorites',
-          icon: <StarOutlined />,
-          label: <Link to="/favorites">Favorites</Link>,
-        }
+        { key: 'home', icon: <HomeOutlined />, label: <Link to="/">Dashboard</Link> },
+        { key: 'search', icon: <SearchOutlined />, label: <Link to="/search">Research</Link> },
+        { key: 'favorites', icon: <StarOutlined />, label: <Link to="/favorites">Watchlist</Link> },
+        { key: 'portfolio', icon: <FundOutlined />, label: <Link to="/portfolio">Portfolio</Link> },
+        { key: 'alerts', icon: <BellOutlined />, label: <Link to="/alerts">Alerts</Link> },
       ]}
     />
   );
 };
 
-// AppContent component that will be rendered inside the Router
-const AppContent = () => {
-  const [stocks, setStocks] = useState([]);
-  const [selectedStock, setSelectedStock] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [favorites, setFavorites] = useState([]);
-  const [favoritesError, setFavoritesError] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 768);
-  const location = useLocation(); // Now this is being used safely inside the Router context
-  const { theme } = useTheme();
-  
-  // Clear selected stock when navigating to favorites page
-  useEffect(() => {
-    if (location.pathname === '/favorites') {
-      setSelectedStock(null);
-    }
-  }, [location.pathname]);
+const UserMenu = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  // Sidebar collapsed state handler
-  const toggleSidebar = () => {
-    setSidebarCollapsed(!sidebarCollapsed);
+  const handleLogout = async () => {
+    await logout();
+    message.success('Logged out');
+    navigate('/');
   };
 
-  // Update sidebar collapsed state on window resize
+  if (!user) {
+    return (
+      <div className="flex items-center gap-2">
+        <Button size="small" onClick={() => navigate('/login')}>Sign in</Button>
+        <Button size="small" type="primary" onClick={() => navigate('/register')}>Start trial</Button>
+      </div>
+    );
+  }
+
+  const menuItems = [
+    { key: 'profile', icon: <UserOutlined />, label: <span onClick={() => navigate('/profile')}>Profile</span> },
+    user.isPro
+      ? { key: 'plan', icon: <CrownOutlined className="text-yellow-400" />, label: <span className="text-yellow-400">Pro plan</span>, disabled: true }
+      : { key: 'upgrade', icon: <CrownOutlined />, label: <span onClick={() => navigate('/pricing')}>Upgrade to Pro</span> },
+    { type: 'divider' },
+    { key: 'logout', icon: <LogoutOutlined />, label: <span onClick={handleLogout} className="text-red-400">Sign out</span> },
+  ];
+
+  return (
+    <Dropdown menu={{ items: menuItems }} placement="bottomRight">
+      <button className="flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white transition-colors px-2 py-1 rounded-md hover:bg-slate-100 dark:hover:bg-[#202838]">
+        <Avatar size={24} icon={<UserOutlined />} className="bg-slate-200 text-slate-600 dark:bg-[#263142] dark:text-slate-200" />
+        <span className="text-sm hidden sm:inline font-medium">{user.email.split('@')[0]}</span>
+        {user.isPro && <CrownOutlined className="text-yellow-400 text-xs" />}
+      </button>
+    </Dropdown>
+  );
+};
+
+const AppContent = () => {
+  const [favorites, setFavorites] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 768);
+  const location = useLocation();
+  const { theme } = useTheme();
+  const currentMeta = location.pathname.startsWith('/analysis')
+    ? ['Analysis', 'Detailed chart, AI summary, news, and peers']
+    : pageMeta[location.pathname] || ['Workspace', 'Market intelligence'];
+
   useEffect(() => {
-    const handleResize = () => {
-      setSidebarCollapsed(window.innerWidth < 768);
-    };
-    
+    const handleResize = () => setSidebarCollapsed(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
 
   const fetchFavorites = async () => {
     try {
       setLoading(true);
       const response = await axios.get('/api/favorites', axiosConfig);
       setFavorites(response.data);
-    } catch (error) {
-      message.error('Failed to fetch favorites');
-      console.error('Error fetching favorites:', error);
+    } catch {
+      // Favorites are optional for anonymous/local use.
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSearch = async (searchResults) => {
-    try {
-      setStocks(searchResults);
-      // Automatically select the first stock from search results if available
-      if (searchResults && searchResults.length > 0) {
-        setSelectedStock(searchResults[0]);
-      } else {
-        setSelectedStock(null);
-      }
-      setError(null);
-    } catch (err) {
-      console.error('Search error:', err);
-      setError('Failed to fetch search results. Please try again.');
-      setStocks([]);
-      setSelectedStock(null);
-    }
-  };
-
-  const handleStockSelect = (stock) => {
-    setSelectedStock(stock);
-    setError(null);
-  };
-
-  const toggleFavorite = async (stock) => {
-    try {
-      const isFavorite = favorites.some(fav => fav.symbol === stock.symbol);
-      if (isFavorite) {
-        await axios.delete(`/api/favorites/${stock.symbol}`, axiosConfig);
-        message.success('Removed from favorites');
-      } else {
-        await axios.post('/api/favorites', stock, axiosConfig);
-        message.success('Added to favorites');
-      }
-      fetchFavorites();
-    } catch (error) {
-      message.error('Failed to update favorites');
-      console.error('Error updating favorites:', error);
     }
   };
 
@@ -153,168 +155,76 @@ const AppContent = () => {
     fetchFavorites();
   }, []);
 
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.body.classList.add('dark');
-    } else {
-      document.body.classList.remove('dark');
-    }
-  }, [theme]);
-
   return (
-    <Layout className="min-h-screen">
-      <Sider 
+    <Layout className="min-h-screen app-shell">
+      <Sider
         trigger={null}
         collapsible
         collapsed={sidebarCollapsed}
         collapsedWidth={0}
-        width={250}
-        className="fixed h-full z-30 left-0 top-0 dark:bg-[#1a1a1a] bg-white dark:border-[#333333] border-gray-200 border-r"
+        width={256}
+        className={`fixed h-full z-30 left-0 top-0 ${theme === 'dark' ? 'app-sidebar' : 'bg-white border-r border-slate-200 shadow-sm'}`}
       >
-        <div className="p-4 h-16 flex items-center border-b border-[#333333]">
-          <Link to="/" className="flex items-center">
-            <div className="transform transition-all duration-300">
-              <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-0.5 rounded-lg shadow-md">
-                <div className={`${theme === 'dark' ? 'bg-[#1a1a1a]' : 'bg-white'} rounded-md px-3 py-1`}>
-                  <span className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-tight">
-                    Bö<span className="text-yellow-400">rs</span>vy
-                  </span>
-                </div>
-              </div>
+        <div className={`h-16 px-4 flex items-center border-b ${theme === 'dark' ? 'border-[#243044]' : 'border-slate-200'}`}>
+          <Link to="/" className="flex items-center gap-3 min-w-0">
+            <div className="h-9 w-9 rounded-md bg-blue-600 text-white grid place-items-center shadow-sm">
+              <RiseOutlined />
+            </div>
+            <div className="min-w-0">
+              <div className={`text-base font-semibold leading-tight ${theme === 'dark' ? 'text-white' : 'text-slate-950'}`}>BorsVy</div>
+              <div className={`text-[11px] leading-tight ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Market intelligence</div>
             </div>
           </Link>
         </div>
-        <SidebarNavigation collapsed={sidebarCollapsed} onClose={() => setSidebarCollapsed(true)} />
+        <div className={`px-4 pt-4 pb-2 text-[11px] font-semibold uppercase ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Workspace</div>
+        <SidebarNavigation />
       </Sider>
 
-      <Layout className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-[250px]'}`}>
-        <Header className="sticky top-0 z-20 flex items-center h-16 px-4 bg-white dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-[#333333]">
+      <Layout className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-[256px]'}`}>
+        <Header className="sticky top-0 z-20 flex items-center h-16 px-4 app-header">
           <button
-            onClick={toggleSidebar}
-            className="mr-4 text-gray-400 hover:text-white transition-colors"
+            onClick={() => setSidebarCollapsed(prev => !prev)}
+            className="mr-4 h-9 w-9 rounded-md grid place-items-center text-slate-500 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202838] transition-colors"
+            aria-label={sidebarCollapsed ? 'Open navigation' : 'Close navigation'}
           >
             {sidebarCollapsed ? <MenuOutlined /> : <CloseOutlined />}
           </button>
-          <div className="flex-1 flex justify-between items-center">
-            <div className="md:hidden">
-              {!sidebarCollapsed && (
-                <div className="transform transition-all duration-300">
-                  <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 p-0.5 rounded-lg shadow-md">
-                    <div className="bg-[#1a1a1a] rounded-md px-3 py-1">
-                      <span className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 tracking-tight">
-                        Bö<span className="text-yellow-400">rs</span>vy
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
+          <div className="flex-1 flex justify-between items-center min-w-0">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-slate-950 dark:text-slate-50 truncate">{currentMeta[0]}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 truncate hidden sm:block">{currentMeta[1]}</div>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
               <ThemeToggle />
+              <UserMenu />
             </div>
           </div>
         </Header>
 
-        <Content className="p-4 sm:p-6 bg-slate-100 dark:bg-[#1a1a1a]">
+        <Content className="p-4 sm:p-6 app-content min-h-[calc(100vh-64px)]">
           <Routes>
-            <Route path="/" element={<StockSearch onSearch={handleSearch} isLoading={isLoading} onToggleFavorite={toggleFavorite} favorites={favorites} />} />
-            <Route path="/favorites" element={<Favorites favorites={favorites} onToggleFavorite={toggleFavorite} loading={loading} onSelectStock={handleStockSelect} />} />
-            <Route path="/analysis/:symbol" element={<Analysis />} />
+            <Route path="/" element={<DashboardPage favorites={favorites} />} />
+            <Route path="/search" element={<SearchPage favorites={favorites} onToggleFavorite={fetchFavorites} />} />
+            <Route path="/favorites" element={<Favorites favorites={favorites} onToggleFavorite={fetchFavorites} loading={loading} />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/alerts" element={<AlertsPage />} />
+            <Route path="/analysis/:symbol" element={<Analysis favorites={favorites} onToggleFavorite={fetchFavorites} />} />
             <Route path="/chart/:symbol" element={<StockChart />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Routes>
-          
-          {error && (
-            <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
-              <p className="text-red-200 font-medium">{error}</p>
-            </div>
-          )}
-
-          {favoritesError && (
-            <div className="bg-red-900/50 border border-red-500 rounded-xl p-4 mt-4">
-              <p className="text-red-200 font-medium">{favoritesError}</p>
-            </div>
-          )}
-
-          {/* Only show welcome screen on home route when no stocks or selected stock */}
-          {!stocks.length && !selectedStock && location.pathname === '/' ? (
-            <div className="flex justify-center items-center min-h-[calc(100vh-300px)] -mt-8">
-              <WelcomeScreen />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-8 mt-4 sm:mt-8">
-              {/* Stock list on the left */}
-              <div className="lg:col-span-1">
-                {stocks.length > 0 ? (
-                  <>
-                    <StockList
-                      stocks={stocks}
-                      selectedStock={selectedStock}
-                      onSelectStock={handleStockSelect}
-                      favorites={favorites}
-                      onToggleFavorite={toggleFavorite}
-                      isLoading={isLoading}
-                    />
-                    
-                    {/* Quick access favorites in a horizontal scroll */}
-                    <div className="mt-4 bg-[#1a1a1a] rounded-2xl shadow-md p-4 border border-[#333333]">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-lg font-semibold text-[#e6e6e6] flex items-center">
-                          <StarOutlined className="mr-2 text-yellow-400" /> Quick Favorites
-                        </h3>
-                      </div>
-                      {favorites.length > 0 ? (
-                        <div className="overflow-x-auto pb-2 flex-nowrap hide-scrollbar">
-                          <div className="flex space-x-2">
-                            {favorites.map(stock => (
-                              <button
-                                key={stock.symbol}
-                                onClick={() => handleStockSelect(stock)}
-                                className={`flex-shrink-0 px-3 py-2 rounded-lg border ${
-                                  selectedStock?.symbol === stock.symbol 
-                                    ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
-                                    : 'bg-[#262626] border-[#333333] text-gray-300 hover:border-blue-500/50'
-                                }`}
-                              >
-                                {stock.symbol}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-gray-500 text-sm">No favorites yet</p>
-                      )}
-                      <div className="mt-2 text-right">
-                        <Link to="/favorites" className="text-xs text-blue-400 hover:text-blue-300">
-                          View all favorites →
-                        </Link>
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-              </div>
-              
-              {/* Stock analysis on the right */}
-              <div className="lg:col-span-3">
-                {selectedStock && <Analysis selectedStock={selectedStock} />}
-              </div>
-            </div>
-          )}
         </Content>
       </Layout>
     </Layout>
   );
 };
 
-// Main App function - only responsible for setting up the Router
 function App() {
   const { theme } = useTheme();
 
   useEffect(() => {
-    if (theme === 'dark') {
-      document.body.classList.add('dark');
-    } else {
-      document.body.classList.remove('dark');
-    }
+    document.body.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
   return (

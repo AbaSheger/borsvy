@@ -1,465 +1,152 @@
-import React, { useState, useEffect, useRef } from 'react';
-import PropTypes from 'prop-types';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  Filler,
-  RadialLinearScale
-} from 'chart.js';
-import { Line, Doughnut } from 'react-chartjs-2';
+import { useTheme } from '../context/ThemeContext';
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  Filler,
-  RadialLinearScale
+const SentimentBadge = ({ sentiment, confidence }) => {
+  const map = {
+    POSITIVE: { label: 'Bullish', color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20' },
+    NEGATIVE: { label: 'Bearish', color: 'text-rose-400 bg-rose-400/10 border-rose-400/20' },
+    NEUTRAL:  { label: 'Neutral', color: 'text-amber-400 bg-amber-400/10 border-amber-400/20' },
+  };
+  const { label, color } = map[sentiment?.toUpperCase()] || map.NEUTRAL;
+  const pct = confidence != null ? Math.round(confidence * 100) : null;
+
+  return (
+    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm font-semibold ${color}`}>
+      <span>{label}</span>
+      {pct != null && <span className="opacity-70 font-normal text-xs">{pct}% confidence</span>}
+    </div>
+  );
+};
+
+const TechStat = ({ label, value, note, dark }) => (
+  <div className={`px-4 py-3 rounded-xl ${dark ? 'bg-[#161616] border border-[#222]' : 'bg-slate-50 border border-slate-100'}`}>
+    <p className={`text-xs mb-1 ${dark ? 'text-zinc-500' : 'text-slate-400'}`}>{label}</p>
+    <p className={`text-sm font-bold tabular-nums ${dark ? 'text-zinc-100' : 'text-slate-800'}`}>
+      {value != null ? Number(value).toFixed(2) : '—'}
+    </p>
+    {note && <p className={`text-xs mt-0.5 ${dark ? 'text-zinc-600' : 'text-slate-400'}`}>{note}</p>}
+  </div>
 );
 
-const AnalysisVisualization = ({ analysis, technicalData }) => {
-  const [chartData, setChartData] = useState(null);
-  const [sentimentData, setSentimentData] = useState(null);
-  const [newsSentimentData, setNewsSentimentData] = useState(null);
-  const [chartError, setChartError] = useState(null);
-  const technicalChartRef = useRef(null);
-  const sentimentChartRef = useRef(null);
-  const newsSentimentChartRef = useRef(null);
+const AnalysisVisualization = ({ analysis }) => {
+  const { theme } = useTheme();
+  const dark = theme === 'dark';
 
-  // Debug logging
-  useEffect(() => {
-    console.log('Analysis data received:', analysis);
-    console.log('Technical data received:', technicalData);
-  }, [analysis, technicalData]);
+  if (!analysis) return null;
 
-  // Cleanup charts on unmount or when analysis changes
-  useEffect(() => {
-    const cleanup = () => {
-      if (technicalChartRef.current?.chartInstance) {
-        technicalChartRef.current.chartInstance.destroy();
-      }
-      if (sentimentChartRef.current?.chartInstance) {
-        sentimentChartRef.current.chartInstance.destroy();
-      }
-      if (newsSentimentChartRef.current?.chartInstance) {
-        newsSentimentChartRef.current.chartInstance.destroy();
-      }
-    };
+  const llm = analysis.llm || {};
+  const technical = analysis.technical || {};
+  const sentiment = llm.sentiment || analysis.sentiment;
+  const confidence = llm.confidence ?? analysis.confidence;
+  const summary = llm.summary || analysis.summary || analysis.aiAnalysis;
+  const bullish = llm.bullishPoints || analysis.bullishPoints || [];
+  const bearish = llm.bearishRisks || analysis.bearishRisks || [];
+  const outlook = llm.outlook || analysis.outlook;
 
-    // Only cleanup on unmount
-    return cleanup;
-  }, []); // Remove analysis dependency
+  const rsi = technical.rsi ?? analysis.rsi;
+  const macd = technical.macd ?? analysis.macd;
+  const sma20 = technical.sma20 ?? analysis.sma20;
+  const sma50 = technical.sma50 ?? analysis.sma50;
 
-  // Handle chart updates when data changes
-  useEffect(() => {
-    if (analysis) {
-      try {
-        // Technical Analysis Chart Data
-        const technicalChartData = {
-          labels: ['Price', 'SMA20', 'SMA50'],
-          datasets: [
-            {
-              label: 'Technical Indicators',
-              data: [
-                analysis.technical?.price || 0,
-                analysis.technical?.sma20 || 0,
-                analysis.technical?.sma50 || 0
-              ],
-              borderColor: 'rgb(75, 192, 192)',
-              tension: 0.1
-            }
-          ]
-        };
+  const card = dark
+    ? 'bg-[#111111] border border-[#222222] rounded-2xl'
+    : 'bg-white border border-slate-200 rounded-2xl';
 
-        // Sentiment Gauge Data
-        const sentimentValue = analysis.llm?.sentiment === 'POSITIVE' ? 1 : 
-                             analysis.llm?.sentiment === 'NEGATIVE' ? -1 : 0;
-        const sentimentGaugeData = {
-          labels: ['Positive', 'Neutral', 'Negative'],
-          datasets: [{
-            data: [
-              sentimentValue === 1 ? 1 : 0,
-              sentimentValue === 0 ? 1 : 0,
-              sentimentValue === -1 ? 1 : 0
-            ],
-            backgroundColor: [
-              'rgba(75, 192, 192, 0.5)',
-              'rgba(255, 206, 86, 0.5)',
-              'rgba(255, 99, 132, 0.5)'
-            ],
-            borderColor: [
-              'rgba(75, 192, 192, 1)',
-              'rgba(255, 206, 86, 1)',
-              'rgba(255, 99, 132, 1)'
-            ],
-            borderWidth: 1
-          }]
-        };
+  const hasLlm = summary || bullish.length > 0 || bearish.length > 0 || outlook;
+  const hasTech = rsi != null || macd != null || sma20 != null || sma50 != null;
 
-        // News Sentiment Distribution Data
-        const newsSentimentDistribution = {
-          labels: ['Positive', 'Neutral', 'Negative'],
-          datasets: [{
-            data: [
-              analysis.newsSentiment?.positiveCount || 0,
-              analysis.newsSentiment?.neutralCount || 0,
-              analysis.newsSentiment?.negativeCount || 0
-            ],
-            backgroundColor: [
-              'rgba(75, 192, 192, 0.5)',
-              'rgba(255, 206, 86, 0.5)',
-              'rgba(255, 99, 132, 0.5)'
-            ],
-            borderColor: [
-              'rgba(75, 192, 192, 1)',
-              'rgba(255, 206, 86, 1)',
-              'rgba(255, 99, 132, 1)'
-            ],
-            borderWidth: 1
-          }]
-        };
-
-        console.log('Chart data prepared:', {
-          technical: technicalChartData,
-          sentiment: sentimentGaugeData,
-          newsSentiment: newsSentimentDistribution
-        });
-
-        setChartData(technicalChartData);
-        setSentimentData(sentimentGaugeData);
-        setNewsSentimentData(newsSentimentDistribution);
-        setChartError(null);
-      } catch (error) {
-        console.error('Error preparing chart data:', error);
-        setChartError('Failed to prepare chart data');
-      }
-    }
-  }, [analysis, technicalData]);
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top',
-        labels: {
-          color: 'white',
-          font: {
-            size: 14,
-            weight: 'bold'
-          }
-        }
-      },
-      title: {
-        display: true,
-        text: 'Technical Analysis',
-        color: 'white',
-        font: {
-          size: 16,
-          weight: 'bold'
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          color: 'white',
-          font: {
-            size: 12,
-            weight: 'bold'
-          }
-        },
-        grid: {
-          color: 'rgba(255, 255, 255, 0.1)'
-        }
-      },
-      x: {
-        ticks: {
-          color: 'white',
-          font: {
-            size: 12,
-            weight: 'bold'
-          }
-        },
-        grid: {
-          color: 'rgba(255, 255, 255, 0.1)'
-        }
-      }
-    }
-  };
-
-  const sentimentOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top',
-        labels: {
-          color: 'white',
-          font: {
-            size: 14,
-            weight: 'bold'
-          }
-        }
-      },
-      title: {
-        display: true,
-        text: 'Market Sentiment',
-        color: 'white',
-        font: {
-          size: 16,
-          weight: 'bold'
-        }
-      }
-    },
-    scales: {
-      r: {
-        beginAtZero: true,
-        ticks: {
-          display: false
-        },
-        grid: {
-          display: false
-        },
-        angleLines: {
-          display: false
-        },
-        pointLabels: {
-          display: false
-        }
-      }
-    }
-  };
-
-  const newsSentimentOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top',
-        labels: {
-          color: 'white',
-          font: {
-            size: 14,
-            weight: 'bold'
-          }
-        }
-      },
-      title: {
-        display: true,
-        text: 'News Sentiment Distribution',
-        color: 'white',
-        font: {
-          size: 16,
-          weight: 'bold'
-        }
-      }
-    },
-    scales: {
-      r: {
-        beginAtZero: true,
-        ticks: {
-          display: false
-        },
-        grid: {
-          display: false
-        },
-        angleLines: {
-          display: false
-        },
-        pointLabels: {
-          display: false
-        }
-      }
-    }
-  };
-
-  if (!analysis) {
+  if (!hasLlm && !hasTech) {
     return (
-      <div className="text-center text-gray-400 py-8">
+      <div className={`${card} p-8 text-center ${dark ? 'text-zinc-500' : 'text-slate-400'}`}>
         No analysis data available
       </div>
     );
   }
 
-  if (chartError) {
-    return (
-      <div className="text-center text-red-400 py-8">
-        {chartError}
-      </div>
-    );
-  }
-
   return (
-    <div className="analysis-visualization">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
-        {/* Technical Analysis Section */}
-        <div className="bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-md">
-          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">Technical Analysis</h3>
-          <div className="h-[250px] sm:h-[300px]">
-            {chartData && <Line data={chartData} options={chartOptions} ref={technicalChartRef} />}
+    <div className="space-y-4">
+      {/* LLM Analysis */}
+      {hasLlm && (
+        <div className={`${card} p-5 space-y-5`}>
+          {/* Header */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h3 className={`text-sm font-semibold uppercase tracking-wider ${dark ? 'text-zinc-400' : 'text-slate-500'}`}>
+              AI Analysis
+            </h3>
+            {sentiment && <SentimentBadge sentiment={sentiment} confidence={confidence} />}
           </div>
-          {analysis.technical?.signals && (
-            <div className="mt-4 sm:mt-5">
-              <h4 className="text-base sm:text-lg font-medium mb-3 text-white">Technical Signals</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {Object.entries(analysis.technical.signals).map(([key, value]) => (
-                  <div key={key} className="bg-gray-700 p-3 rounded-xl">
-                    <span className="font-medium text-white">{key}:</span>{' '}
-                    <span className={`${
-                      value.toLowerCase().includes('bullish') ? 'text-green-500 font-bold' :
-                      value.toLowerCase().includes('bearish') ? 'text-red-500 font-bold' :
-                      'text-white'
-                    }`}>{value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
 
-        {/* Sentiment Analysis Section */}
-        <div className="bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-md">
-          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">Sentiment Analysis</h3>
-          <div className="grid grid-cols-1 gap-4 sm:gap-5">
-            <div className="h-[250px] sm:h-[300px]">
-              {sentimentData && (
-                <Doughnut 
-                  data={sentimentData} 
-                  options={sentimentOptions} 
-                  ref={sentimentChartRef}
-                />
-              )}
-            </div>
-            {analysis.llm && (
-              <div className="mt-3 sm:mt-4">
-                <h4 className="text-base sm:text-lg font-medium mb-3 text-white">✨ AI Analysis</h4>
-                <div className="bg-gray-700 p-4 rounded-xl">
-                  <p className="mb-2 text-white">
-                    <span className="font-medium">Sentiment:</span>{' '}
-                    <span className={`${
-                      analysis.llm.sentiment === 'POSITIVE' ? 'text-green-500 font-bold' :
-                      analysis.llm.sentiment === 'NEGATIVE' ? 'text-red-500 font-bold' :
-                      'text-yellow-500 font-bold'
-                    }`}>
-                      {analysis.llm.sentiment ? 
-                        analysis.llm.sentiment.charAt(0) + analysis.llm.sentiment.slice(1).toLowerCase() : 
-                        'Neutral'}
-                    </span>
-                  </p>
-                  <p className="mb-2 text-white">
-                    <span className="font-medium">Score:</span>{' '}
-                    {analysis.llm.score?.toFixed(2) || '0.00'}
-                  </p>
-                  <p className="mb-2 text-white">
-                    <span className="font-medium">Confidence:</span>{' '}
-                    {((analysis.llm.confidence || 0) * 100).toFixed(1)}%
-                  </p>
-                  {analysis.llm.summary && (
-                    <p className="text-white mt-2">
-                      <span className="font-medium">Summary:</span>{' '}
-                      {analysis.llm.summary}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Fundamental Analysis Section */}
-        <div className="bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-md">
-          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">Fundamental Analysis</h3>
-          {analysis.fundamental?.signals && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {Object.entries(analysis.fundamental.signals).map(([key, value]) => (
-                <div key={key} className="bg-gray-700 p-4 rounded-xl">
-                  <h4 className="font-medium mb-2 text-white">{key}</h4>
-                  <p className="text-white">{value}</p>
-                </div>
+          {/* Summary */}
+          {summary && (
+            <div>
+              {summary.split('\n\n').filter(Boolean).map((para, i) => (
+                <p key={i} className={`text-sm leading-relaxed mb-3 last:mb-0 ${dark ? 'text-zinc-300' : 'text-slate-600'}`}>
+                  {para}
+                </p>
               ))}
             </div>
           )}
-        </div>
 
-        {/* News Sentiment Section */}
-        <div className="bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-md">
-          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">News Sentiment</h3>
-          <div className="h-[250px] sm:h-[300px]">
-            {newsSentimentData && <Doughnut data={newsSentimentData} options={newsSentimentOptions} ref={newsSentimentChartRef} />}
-          </div>
-          {analysis.newsSentiment && (
-            <div className="mt-4 sm:mt-5">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-gray-700 p-3 rounded-xl text-center">
-                  <span className="text-green-500 font-bold">Positive</span>
-                  <p className="text-white mt-1">{analysis.newsSentiment.positiveCount}</p>
+          {/* Bullish / Bearish columns */}
+          {(bullish.length > 0 || bearish.length > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {bullish.length > 0 && (
+                <div className={`rounded-xl p-4 ${dark ? 'bg-emerald-400/5 border border-emerald-400/15' : 'bg-emerald-50 border border-emerald-100'}`}>
+                  <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-3">Bullish Signals</p>
+                  <ul className="space-y-2">
+                    {bullish.map((pt, i) => (
+                      <li key={i} className={`text-sm flex gap-2 leading-snug ${dark ? 'text-zinc-300' : 'text-slate-600'}`}>
+                        <span className="text-emerald-400 flex-shrink-0 mt-0.5">▲</span>
+                        {pt}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <div className="bg-gray-700 p-3 rounded-xl text-center">
-                  <span className="text-yellow-500 font-bold">Neutral</span>
-                  <p className="text-white mt-1">{analysis.newsSentiment.neutralCount}</p>
+              )}
+              {bearish.length > 0 && (
+                <div className={`rounded-xl p-4 ${dark ? 'bg-rose-400/5 border border-rose-400/15' : 'bg-rose-50 border border-rose-100'}`}>
+                  <p className="text-xs font-semibold text-rose-400 uppercase tracking-wider mb-3">Key Risks</p>
+                  <ul className="space-y-2">
+                    {bearish.map((pt, i) => (
+                      <li key={i} className={`text-sm flex gap-2 leading-snug ${dark ? 'text-zinc-300' : 'text-slate-600'}`}>
+                        <span className="text-rose-400 flex-shrink-0 mt-0.5">▼</span>
+                        {pt}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <div className="bg-gray-700 p-3 rounded-xl text-center">
-                  <span className="text-red-500 font-bold">Negative</span>
-                  <p className="text-white mt-1">{analysis.newsSentiment.negativeCount}</p>
-                </div>
-              </div>
+              )}
+            </div>
+          )}
+
+          {/* Outlook */}
+          {outlook && (
+            <div className={`rounded-xl p-4 ${dark ? 'bg-blue-500/5 border border-blue-500/15' : 'bg-blue-50 border border-blue-100'}`}>
+              <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Outlook</p>
+              <p className={`text-sm leading-relaxed ${dark ? 'text-zinc-300' : 'text-slate-600'}`}>{outlook}</p>
             </div>
           )}
         </div>
-      </div>
+      )}
 
-      {/* Overall Summary Section */}
-      {analysis.summary && (
-        <div className="mt-6 sm:mt-8 bg-gray-800 p-5 sm:p-6 rounded-2xl shadow-md">
-          <h3 className="text-lg sm:text-xl font-semibold mb-4 sm:mb-5 text-white">✨ Overall Analysis</h3>
-          <div className="bg-gray-700 p-5 sm:p-6 rounded-xl whitespace-pre-line">
-            <p className="text-base sm:text-lg text-white leading-relaxed">
-              {analysis.summary}
-            </p>
+      {/* Technical indicators */}
+      {hasTech && (
+        <div className={`${card} p-5`}>
+          <h3 className={`text-sm font-semibold uppercase tracking-wider mb-4 ${dark ? 'text-zinc-400' : 'text-slate-500'}`}>
+            Technical Indicators
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <TechStat label="RSI (14)"
+              value={rsi}
+              note={rsi != null ? (rsi > 70 ? 'Overbought' : rsi < 30 ? 'Oversold' : 'Neutral') : null}
+              dark={dark} />
+            <TechStat label="MACD" value={macd} dark={dark} />
+            <TechStat label="SMA 20" value={sma20} dark={dark} />
+            <TechStat label="SMA 50" value={sma50} dark={dark} />
           </div>
         </div>
       )}
     </div>
   );
-};
-
-AnalysisVisualization.propTypes = {
-  analysis: PropTypes.shape({
-    technical: PropTypes.shape({
-      price: PropTypes.number,
-      sma20: PropTypes.number,
-      sma50: PropTypes.number,
-      signals: PropTypes.object
-    }),
-    fundamental: PropTypes.shape({
-      signals: PropTypes.object
-    }),
-    llm: PropTypes.shape({
-      sentiment: PropTypes.string,
-      confidence: PropTypes.number
-    }),
-    newsSentiment: PropTypes.shape({
-      positiveCount: PropTypes.number,
-      neutralCount: PropTypes.number,
-      negativeCount: PropTypes.number
-    }),
-    summary: PropTypes.string
-  }),
-  technicalData: PropTypes.object
 };
 
 export default AnalysisVisualization;

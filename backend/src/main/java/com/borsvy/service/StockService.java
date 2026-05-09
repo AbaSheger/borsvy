@@ -1,3 +1,4 @@
+
 package com.borsvy.service;
 
 import com.borsvy.model.Stock;
@@ -15,11 +16,11 @@ import org.springframework.web.client.RestTemplate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.borsvy.client.FinnhubClient;
-import com.borsvy.client.SerpApiClient;
+import com.borsvy.client.NewsDataClient;
+import com.borsvy.client.TwelveDataClient;
 import com.borsvy.model.Quote;
 import com.borsvy.model.CompanyProfile2;
 import lombok.extern.slf4j.Slf4j;
-import com.borsvy.client.PolygonClient;
 import com.borsvy.client.RapidApiClient;
 import com.borsvy.model.NewsArticle;
 
@@ -29,8 +30,6 @@ import java.time.ZoneOffset;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.io.IOException;
-import java.time.temporal.ChronoUnit;
-import java.util.concurrent.ThreadLocalRandom;
 import java.time.Duration;
 import java.util.stream.Collectors;
 
@@ -40,8 +39,8 @@ public class StockService {
 
     private final StockRepository stockRepository;
     private final FinnhubClient finnhubClient;
-    private final SerpApiClient serpApiClient;
-    private final PolygonClient polygonClient;
+    private final NewsDataClient newsDataClient;
+    private final TwelveDataClient twelveDataClient;
     private final RapidApiClient rapidApiClient;
     private final NewsAnalysisService newsAnalysisService; // Changed to interface instead of implementation
     private final Map<String, CachedStock> stockCache = new ConcurrentHashMap<>();
@@ -54,16 +53,16 @@ public class StockService {
     private static final int DETAILS_CACHE_EXPIRY_HOURS = 1;
 
     @Autowired
-    public StockService(StockRepository stockRepository, 
-                       FinnhubClient finnhubClient, 
-                       SerpApiClient serpApiClient,
-                       PolygonClient polygonClient,
+    public StockService(StockRepository stockRepository,
+                       FinnhubClient finnhubClient,
+                       NewsDataClient newsDataClient,
+                       TwelveDataClient twelveDataClient,
                        RapidApiClient rapidApiClient,
                        NewsAnalysisService newsAnalysisService) {
         this.stockRepository = stockRepository;
         this.finnhubClient = finnhubClient;
-        this.serpApiClient = serpApiClient;
-        this.polygonClient = polygonClient;
+        this.newsDataClient = newsDataClient;
+        this.twelveDataClient = twelveDataClient;
         this.rapidApiClient = rapidApiClient;
         this.newsAnalysisService = newsAnalysisService;
     }
@@ -73,7 +72,7 @@ public class StockService {
         maxAttempts = 3,
         backoff = @Backoff(delay = 2000, multiplier = 2)
     )
-    private Stock fetchStockFromFinnhub(String symbol) throws IOException {
+    Stock fetchStockFromFinnhub(String symbol) throws IOException {
         try {
             // Check cache first
             CachedStock cached = stockCache.get(symbol);
@@ -93,43 +92,62 @@ public class StockService {
                 return stock;
             }
 
-            // If not in cache or database, fetch from Finnhub
-            Quote quote = finnhubClient.getQuote(symbol);
-            if (quote == null) {
-                return null;
-            }
-
             // Create or update stock object
             Stock stock = dbStock.orElse(new Stock());
             stock.setSymbol(symbol);
-            
-            try {
-                stock.setPrice(quote.getCurrentPrice());
-                stock.setChange(quote.getChange());
-                stock.setChangePercent(quote.getPercentChange());
-                stock.setHigh(quote.getHigh());
-                stock.setLow(quote.getLow());
-                stock.setOpen(quote.getOpen());
-                stock.setVolume(quote.getVolume());
-            } catch (Exception e) {
-                log.error("Error parsing numeric values from Finnhub response for symbol {}: {}", symbol, e.getMessage());
-                return null;
-            }
 
-            // Get company profile for additional details
-            try {
-                CompanyProfile2 profile = finnhubClient.getCompanyProfile2(symbol);
-                if (profile != null) {
-                    stock.setName(profile.getName());
-                    stock.setIndustry(profile.getFinnhubIndustry());
-                    stock.setMarketCap(profile.getMarketCapitalization());
-                    stock.setBeta(profile.getBeta());
-                    Double peRatio = profile.getPe();
-                    log.debug("P/E ratio from Finnhub API for {}: {}", symbol, peRatio);
-                    stock.setPeRatio(peRatio);
+            if (twelveDataClient.isCrypto(symbol)) {
+                // Crypto: use Twelve Data quote instead of Finnhub
+                Map<String, Object> cryptoQuote = twelveDataClient.getCryptoQuote(symbol);
+                if (cryptoQuote == null) return null;
+                stock.setName((String) cryptoQuote.get("name"));
+                stock.setPrice((Double) cryptoQuote.get("price"));
+                stock.setChange((Double) cryptoQuote.get("change"));
+                stock.setChangePercent((Double) cryptoQuote.get("changePercent"));
+                stock.setHigh((Double) cryptoQuote.get("high"));
+                stock.setLow((Double) cryptoQuote.get("low"));
+                stock.setVolume(((Number) cryptoQuote.get("volume")).longValue());
+                stock.setIndustry("Cryptocurrency");
+            } else {
+                // Stock: use Finnhub
+                Quote quote = finnhubClient.getQuote(symbol);
+                if (quote == null) return null;
+
+                try {
+                    stock.setPrice(quote.getCurrentPrice());
+                    stock.setChange(quote.getChange());
+                    stock.setChangePercent(quote.getPercentChange());
+                    stock.setHigh(quote.getHigh());
+                    stock.setLow(quote.getLow());
+                    stock.setOpen(quote.getOpen());
+                    stock.setVolume(quote.getVolume());
+                } catch (Exception e) {
+                    log.error("Error parsing numeric values from Finnhub for {}: {}", symbol, e.getMessage());
+                    return null;
                 }
-            } catch (Exception e) {
-                log.warn("Could not fetch company profile for {}: {}", symbol, e.getMessage());
+
+                // Get company profile for additional details
+                try {
+                    CompanyProfile2 profile = finnhubClient.getCompanyProfile2(symbol);
+                    if (profile != null) {
+                        stock.setName(profile.getName());
+                        stock.setIndustry(profile.getFinnhubIndustry());
+                        stock.setMarketCap(profile.getMarketCapitalization());
+                        stock.setBeta(profile.getBeta());
+                    }
+                } catch (Exception e) {
+                    log.warn("Could not fetch company profile for {}: {}", symbol, e.getMessage());
+                }
+
+                // Get 52-week high/low and TTM P/E from Finnhub metrics
+                try {
+                    Map<String, Double> metrics = finnhubClient.getBasicMetrics(symbol);
+                    if (metrics.containsKey("52WeekHigh")) stock.setHigh52Week(metrics.get("52WeekHigh"));
+                    if (metrics.containsKey("52WeekLow"))  stock.setLow52Week(metrics.get("52WeekLow"));
+                    if (metrics.containsKey("pe") && metrics.get("pe") > 0) stock.setPeRatio(metrics.get("pe"));
+                } catch (Exception e) {
+                    log.warn("Could not fetch metrics for {}: {}", symbol, e.getMessage());
+                }
             }
 
             stock.setLastUpdated(LocalDateTime.now());
@@ -159,42 +177,48 @@ public class StockService {
                 return cached.details;
             }
 
-            // Get real-time data from Finnhub
-            Quote quote = finnhubClient.getQuote(symbol);
-            CompanyProfile2 profile = finnhubClient.getCompanyProfile2(symbol);
-
-            if (quote == null) {
-                log.error("Failed to fetch quote data for symbol: {}", symbol);
-                throw new IOException("Failed to fetch quote data from Finnhub API");
-            }
-
             StockDetails details = new StockDetails();
             details.setSymbol(symbol);
-            
-            // Set basic quote data
-            details.setPrice(quote.getCurrentPrice());
-            details.setChange(quote.getChange());
-            details.setChangePercent(quote.getPercentChange());
-            details.setHigh(quote.getHigh());
-            details.setLow(quote.getLow());
-            details.setOpen(quote.getOpen());
-            details.setPreviousClose(quote.getOpen() - quote.getChange());
-            details.setVolume(quote.getVolume());
 
-            // Set profile data if available
-            if (profile != null) {
-                details.setName(profile.getName());
-                details.setIndustry(profile.getFinnhubIndustry());
-                
-                // Market cap is in billions from the API
-                double marketCapInBillions = profile.getMarketCapitalization();
-                if (marketCapInBillions > 0) {
-                    details.setMarketCap(marketCapInBillions);
+            if (twelveDataClient.isCrypto(symbol)) {
+                // Crypto: use Twelve Data
+                Map<String, Object> cryptoQuote = twelveDataClient.getCryptoQuote(symbol);
+                if (cryptoQuote == null) throw new IOException("Failed to fetch crypto quote for " + symbol);
+                details.setName((String) cryptoQuote.get("name"));
+                details.setPrice((Double) cryptoQuote.get("price"));
+                details.setChange((Double) cryptoQuote.get("change"));
+                details.setChangePercent((Double) cryptoQuote.get("changePercent"));
+                details.setHigh((Double) cryptoQuote.get("high"));
+                details.setLow((Double) cryptoQuote.get("low"));
+                details.setVolume(((Number) cryptoQuote.get("volume")).longValue());
+                details.setIndustry("Cryptocurrency");
+            } else {
+                // Stock: use Finnhub
+                Quote quote = finnhubClient.getQuote(symbol);
+                CompanyProfile2 profile = finnhubClient.getCompanyProfile2(symbol);
+
+                if (quote == null) {
+                    log.error("Failed to fetch quote data for symbol: {}", symbol);
+                    throw new IOException("Failed to fetch quote data from Finnhub API");
                 }
-                
-                // Set fundamental data
-                details.setPeRatio(profile.getPe());
-                details.setBeta(profile.getBeta());
+
+                details.setPrice(quote.getCurrentPrice());
+                details.setChange(quote.getChange());
+                details.setChangePercent(quote.getPercentChange());
+                details.setHigh(quote.getHigh());
+                details.setLow(quote.getLow());
+                details.setOpen(quote.getOpen());
+                details.setPreviousClose(quote.getOpen() - quote.getChange());
+                details.setVolume(quote.getVolume());
+
+                if (profile != null) {
+                    details.setName(profile.getName());
+                    details.setIndustry(profile.getFinnhubIndustry());
+                    double marketCapInBillions = profile.getMarketCapitalization();
+                    if (marketCapInBillions > 0) details.setMarketCap(marketCapInBillions);
+                    details.setPeRatio(profile.getPe());
+                    details.setBeta(profile.getBeta());
+                }
             }
 
             // Cache the details
@@ -212,41 +236,41 @@ public class StockService {
             return new ArrayList<>();
         }
 
-        String normalizedQuery = query.trim().toUpperCase();
+        String trimmed = query.trim();
         List<Stock> searchResults = new ArrayList<>();
-        
+
         try {
-            // First check cache
-            CachedStock cached = stockCache.get(normalizedQuery);
-            if (cached != null && !cached.isExpired()) {
-                log.debug("Returning cached search result for {}", normalizedQuery);
-                searchResults.add(cached.stock);
-                return searchResults;
-            }
-            
-            // Then check database
-            List<Stock> dbResults = stockRepository.findBySymbolContainingIgnoreCaseOrNameContainingIgnoreCase(
-                normalizedQuery, normalizedQuery);
-            if (!dbResults.isEmpty()) {
-                // Update cache for each result
-                for (Stock stock : dbResults) {
-                    if (stock.getLastUpdated() != null && 
-                        Duration.between(stock.getLastUpdated(), LocalDateTime.now()).toMinutes() < CACHE_EXPIRY_MINUTES) {
-                        stockCache.put(stock.getSymbol(), new CachedStock(stock));
-                        searchResults.add(stock);
-                    }
+            // Use Finnhub symbol search for proper name/symbol matching
+            List<Map<String, String>> finnhubResults = finnhubClient.searchSymbols(trimmed);
+
+            for (Map<String, String> item : finnhubResults) {
+                String symbol = item.get("symbol");
+                if (symbol == null || symbol.isEmpty()) continue;
+
+                // Check cache/db first to avoid unnecessary API calls
+                CachedStock cached = stockCache.get(symbol);
+                if (cached != null && !cached.isExpired()) {
+                    searchResults.add(cached.stock);
+                    continue;
                 }
-                if (!searchResults.isEmpty()) {
-                    return searchResults;
+
+                Optional<Stock> dbStock = stockRepository.findById(symbol);
+                if (dbStock.isPresent() && dbStock.get().getLastUpdated() != null &&
+                        Duration.between(dbStock.get().getLastUpdated(), LocalDateTime.now()).toMinutes() < CACHE_EXPIRY_MINUTES) {
+                    searchResults.add(dbStock.get());
+                    continue;
                 }
+
+                // Return a lightweight stub — frontend can fetch full details on demand
+                Stock stub = dbStock.orElse(new Stock());
+                stub.setSymbol(symbol);
+                if (stub.getName() == null || stub.getName().isEmpty()) {
+                    stub.setName(item.get("name"));
+                }
+                stub.setType(item.get("type"));
+                searchResults.add(stub);
             }
-            
-            // If no valid results in cache or database, try API
-            Stock stock = fetchStockFromFinnhub(normalizedQuery);
-            if (stock != null) {
-                searchResults.add(stock);
-            }
-            
+
             return searchResults;
         } catch (Exception e) {
             log.error("Error searching stocks: {}", e.getMessage());
@@ -314,28 +338,13 @@ public class StockService {
     }
 
     public List<StockPrice> getHistoricalData(String symbol, String interval) {
-        // Try to get data from Polygon.io
-        List<StockPrice> polygonData = polygonClient.getHistoricalData(symbol, interval);
-        
-        if (!polygonData.isEmpty()) {
-            log.info("Using Polygon.io data for {} with interval {}", symbol, interval);
-            return polygonData;
+        List<StockPrice> data = twelveDataClient.getHistoricalData(symbol, interval);
+        if (!data.isEmpty()) {
+            log.info("Using Twelve Data for {} interval={}", symbol, interval);
+        } else {
+            log.warn("No historical data available for {} interval={}", symbol, interval);
         }
-        
-        // If Polygon.io didn't return data, try to get current stock data
-        try {
-            Stock currentStock = fetchStockFromFinnhub(symbol);
-            if (currentStock != null) {
-                log.info("Using current stock data to generate historical data for {} with interval {}", symbol, interval);
-                return generatePriceHistoryFromCurrentPrice(currentStock, interval);
-            }
-        } catch (IOException e) {
-            log.warn("Failed to fetch current stock data for {}: {}", symbol, e.getMessage());
-        }
-        
-        // If all else fails, generate synthetic data
-        log.info("No data available for {} with interval {}, using synthetic data", symbol, interval);
-        return generateSyntheticHistoricalData(symbol, interval);
+        return data;
     }
     
     public Map<String, Object> getNewsSentiment(String symbol) {
@@ -377,40 +386,27 @@ public class StockService {
         try {
             log.info("Fetching news for symbol: {} with limit: {}", symbol, limit);
             
-            // Try SerpApi first
-            boolean serpApiSuccess = false;
-            List<Map<String, Object>> serpApiNews = null;
+            // Try NewsData.io first
+            boolean newsDataSuccess = false;
             try {
-                log.info("Attempting to use SerpAPI for news...");
-                serpApiNews = serpApiClient.getStockNews(symbol, limit);
-                
-                // Better detection of API limit errors
-                if (serpApiNews != null && !serpApiNews.isEmpty()) {
-                    // Check if there's an error message that indicates API limit
-                    boolean hasApiLimitError = serpApiNews.stream()
-                        .anyMatch(article -> article.containsKey("error") && 
-                                 article.get("error") != null && 
-                                 article.get("error").toString().toLowerCase().contains("limit"));
-                    
-                    if (!hasApiLimitError) {
-                        log.info("Successfully fetched {} news articles from SerpApi", serpApiNews.size());
-                        List<NewsArticle> articles = convertToNewsArticles(serpApiNews);
-                        if (!articles.isEmpty()) {
-                            serpApiSuccess = true;
-                            return articles;
-                        }
-                    } else {
-                        log.warn("SerpAPI limit reached. Falling back to RapidApi");
+                log.info("Attempting to use NewsData.io for news...");
+                List<Map<String, Object>> newsDataArticles = newsDataClient.getStockNews(symbol, limit);
+                if (newsDataArticles != null && !newsDataArticles.isEmpty()) {
+                    log.info("Successfully fetched {} news articles from NewsData.io", newsDataArticles.size());
+                    List<NewsArticle> articles = convertToNewsArticles(newsDataArticles);
+                    if (!articles.isEmpty()) {
+                        newsDataSuccess = true;
+                        return articles;
                     }
                 } else {
-                    log.warn("SerpAPI returned no results. Falling back to RapidApi");
+                    log.warn("NewsData.io returned no results. Falling back to RapidApi");
                 }
             } catch (Exception e) {
-                log.warn("Error fetching news from SerpApi: {}. Falling back to RapidApi", e.getMessage());
+                log.warn("Error fetching news from NewsData.io: {}. Falling back to RapidApi", e.getMessage());
             }
-            
-            // Fallback to RapidApi if SerpApi failed
-            if (!serpApiSuccess) {
+
+            // Fallback to RapidApi if NewsData.io failed
+            if (!newsDataSuccess) {
                 try {
                     log.info("Attempting to use RapidAPI for news (fallback)...");
                     List<NewsArticle> rapidApiNews = rapidApiClient.getStockNews(symbol, limit);
@@ -454,73 +450,6 @@ public class StockService {
         return newsArticles;
     }
 
-    private List<StockPrice> generateSyntheticHistoricalData(String symbol, String interval) {
-        Stock dummyStock = createDummyStock(symbol);
-        return generatePriceHistoryFromCurrentPrice(dummyStock, interval);
-    }
-
-    private List<StockPrice> generatePriceHistoryFromCurrentPrice(Stock stock, String interval) {
-        List<StockPrice> priceHistory = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
-        double currentPrice = stock.getPrice();
-        
-        int dataPoints;
-        ChronoUnit unit;
-        
-        // Determine number of data points and time unit based on interval
-        switch (interval != null ? interval.toLowerCase() : "1d") {
-            case "1d":
-                dataPoints = 390; // 6.5 hours * 60 minutes
-                unit = ChronoUnit.MINUTES;
-                break;
-            case "1w":
-                dataPoints = 168; // 7 days * 24 hours
-                unit = ChronoUnit.HOURS;
-                break;
-            case "1m":
-                dataPoints = 30;
-                unit = ChronoUnit.DAYS;
-                break;
-            case "3m":
-                dataPoints = 90;
-                unit = ChronoUnit.DAYS;
-                break;
-            case "6m":
-                dataPoints = 180;
-                unit = ChronoUnit.DAYS;
-                break;
-            case "1y":
-                dataPoints = 252; // Trading days in a year
-                unit = ChronoUnit.DAYS;
-                break;
-            default:
-                dataPoints = 30;
-                unit = ChronoUnit.DAYS;
-        }
-        
-        // Generate price history with realistic volatility
-        double volatility = 0.02; // 2% daily volatility
-        double price = currentPrice;
-        
-        for (int i = dataPoints; i > 0; i--) {
-            StockPrice pricePoint = new StockPrice();
-            pricePoint.setSymbol(stock.getSymbol());
-            pricePoint.setTimestamp(now.minus(i, unit));
-            
-            // Add some randomness to the price movement
-            double randomChange = (ThreadLocalRandom.current().nextDouble() - 0.5) * volatility * price;
-            price += randomChange;
-            
-            // Ensure price stays positive
-            price = Math.max(price, 0.01);
-            
-            pricePoint.setPrice(price);
-            pricePoint.setVolume((long)(stock.getVolume() * (1 + (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.2)));
-            priceHistory.add(pricePoint);
-        }
-        
-        return priceHistory;
-    }
 
     public List<Map<String, Object>> getChartData(String symbol, String interval) {
         List<StockPrice> priceHistory = getHistoricalData(symbol, interval);
@@ -707,23 +636,6 @@ public class StockService {
         return "Hold";
     }
 
-    public Stock createDummyStock(String symbol) {
-        Stock stock = new Stock();
-        stock.setSymbol(symbol);
-        stock.setName(symbol);
-        stock.setPrice(100.0 + ThreadLocalRandom.current().nextDouble(-10, 10));
-        stock.setChange(ThreadLocalRandom.current().nextDouble(-5, 5));
-        stock.setChangePercent(ThreadLocalRandom.current().nextDouble(-5, 5));
-        stock.setHigh(stock.getPrice() + ThreadLocalRandom.current().nextDouble(0, 5));
-        stock.setLow(stock.getPrice() - ThreadLocalRandom.current().nextDouble(0, 5));
-        stock.setOpen(stock.getPrice() + ThreadLocalRandom.current().nextDouble(-2, 2));
-        stock.setVolume(ThreadLocalRandom.current().nextLong(1000000, 5000000));
-        stock.setMarketCap(1000000000.0);
-        stock.setPeRatio(20.0);
-        stock.setBeta(1.0);
-        stock.setLastUpdated(LocalDateTime.now());
-        return stock;
-    }
 
     private String formatNumber(long number) {
         if (number >= 1_000_000_000) {

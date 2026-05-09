@@ -5,7 +5,6 @@ import com.borsvy.repository.FavoriteRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,78 +19,33 @@ public class FavoriteService {
 
     @Autowired
     private FavoriteRepository favoriteRepository;
-    
-    /**
-     * Get all favorite stocks
-     */
-    public List<Favorite> getAllFavorites() {
-        return favoriteRepository.findAll();
+
+    public List<Favorite> getFavoritesByUser(Long userId) {
+        return favoriteRepository.findByUserId(userId);
     }
-    
-    /**
-     * Add a stock to favorites
-     */
+
     @Transactional
-    public Favorite addFavorite(Favorite favorite) {
-        // Check if already exists
-        if (favoriteRepository.existsById(favorite.getSymbol())) {
-            logger.info("Symbol {} already exists in favorites. Skipping insert.", favorite.getSymbol());
-            return favoriteRepository.findById(favorite.getSymbol()).orElse(favorite); // return existing
+    public Favorite addFavorite(Long userId, Favorite favorite) {
+        if (favoriteRepository.existsByUserIdAndSymbol(userId, favorite.getSymbol())) {
+            logger.info("Symbol {} already in favorites for user {}. Skipping.", favorite.getSymbol(), userId);
+            return favoriteRepository.findByUserIdAndSymbol(userId, favorite.getSymbol()).orElse(favorite);
         }
-    
-        // Set current time if not provided
+        favorite.setUserId(userId);
         if (favorite.getAddedAt() == null) {
             favorite.setAddedAt(LocalDateTime.now());
         }
-    
-        // Save to database
         return favoriteRepository.save(favorite);
     }
-    
-    
-    /**
-     * Remove a stock from favorites
-     */
+
     @Transactional
-    public boolean removeFavorite(String symbol) {
-        try {
-            // Get the favorite first to ensure we have the latest version
-            Optional<Favorite> favorite = favoriteRepository.findById(symbol);
-            if (favorite.isEmpty()) {
-                return false;
-            }
-            
-            // Delete from database
-            favoriteRepository.delete(favorite.get());
-            return true;
-        } catch (ObjectOptimisticLockingFailureException e) {
-            logger.warn("Concurrent modification detected while removing favorite: {}. Retrying...", symbol);
-            // If we get a concurrent modification, try one more time
-            try {
-                Optional<Favorite> favorite = favoriteRepository.findById(symbol);
-                if (favorite.isEmpty()) {
-                    return false;
-                }
-                favoriteRepository.delete(favorite.get());
-                return true;
-            } catch (Exception retryEx) {
-                logger.error("Failed to remove favorite {} after retry: {}", symbol, retryEx.getMessage());
-                return false;
-            }
-        }
+    public boolean removeFavorite(Long userId, String symbol) {
+        Optional<Favorite> fav = favoriteRepository.findByUserIdAndSymbol(userId, symbol);
+        if (fav.isEmpty()) return false;
+        favoriteRepository.delete(fav.get());
+        return true;
     }
-    
-    /**
-     * Check if a stock is in favorites
-     */
-    public boolean isFavorite(String symbol) {
-        return favoriteRepository.existsById(symbol);
-    }
-    
-    /**
-     * Get a specific favorite by symbol
-     */
-    public Optional<Favorite> getFavoriteBySymbol(String symbol) {
-        return favoriteRepository.findById(symbol);
+
+    public boolean isFavorite(Long userId, String symbol) {
+        return favoriteRepository.existsByUserIdAndSymbol(userId, symbol);
     }
 }

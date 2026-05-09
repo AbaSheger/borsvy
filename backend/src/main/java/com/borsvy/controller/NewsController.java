@@ -10,7 +10,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/news")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "*", allowCredentials = "false")
 public class NewsController {
 
     @Autowired

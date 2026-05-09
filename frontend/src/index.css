@@ -5,32 +5,102 @@
 :root {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   line-height: 1.5;
+  color-scheme: light;
 }
 
 /* Default light theme styles */
 body {
   margin: 0;
   min-height: 100vh;
-  @apply bg-slate-100 text-slate-800;
+  @apply bg-[#f6f7f9] text-slate-900 antialiased;
 }
 
 /* Dark theme styles are applied via the dark class by Tailwind */
-.dark body {
-  @apply bg-[#1a1a1a] text-[#e6e6e6];
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body,
+body.dark {
+  @apply bg-[#0f1115] text-slate-100;
 }
 
 /* Custom utility classes for theme-aware styling */
 @layer utilities {
+  .app-shell {
+    @apply bg-[#f6f7f9] dark:bg-[#0f1115];
+  }
+
+  .app-sidebar {
+    @apply bg-[#111827] border-r border-[#243044] shadow-sm;
+  }
+
+  .app-header {
+    @apply bg-white/95 dark:bg-[#151922]/95 border-b border-slate-200 dark:border-[#263142] backdrop-blur;
+  }
+
+  .app-content {
+    @apply bg-[#f6f7f9] dark:bg-[#0f1115];
+  }
+
+  .page-wrap {
+    @apply max-w-[1440px] mx-auto w-full;
+  }
+
+  .page-kicker {
+    @apply text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400;
+  }
+
+  .page-title {
+    @apply text-xl sm:text-2xl font-semibold text-slate-950 dark:text-slate-50;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-slate-500 dark:text-slate-400;
+  }
+
+  .saas-panel {
+    @apply bg-white dark:bg-[#151922] border border-slate-200 dark:border-[#263142] rounded-lg shadow-sm;
+  }
+
+  .saas-panel-muted {
+    @apply bg-slate-50 dark:bg-[#11151d] border border-slate-200 dark:border-[#263142] rounded-lg;
+  }
+
+  .metric-card {
+    @apply bg-white dark:bg-[#151922] border border-slate-200 dark:border-[#263142] rounded-lg p-4 shadow-sm;
+  }
+
+  .data-table {
+    @apply w-full text-sm;
+  }
+
+  .data-table thead {
+    @apply bg-slate-50 dark:bg-[#11151d] text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400;
+  }
+
+  .data-table th {
+    @apply px-4 py-3;
+  }
+
+  .data-table td {
+    @apply px-4 py-3 border-t border-slate-200 dark:border-[#263142];
+  }
+
+  .data-table tbody tr {
+    @apply hover:bg-slate-50 dark:hover:bg-[#1a2030] transition-colors;
+  }
+
   .bg-card-light {
     @apply bg-white border-gray-200;
   }
   
   .bg-card-dark {
-    @apply bg-[#262626] border-[#333333];
+    @apply bg-[#151922] border-[#263142];
   }
   
   .theme-card {
-    @apply border rounded-xl shadow-md;
+    @apply border rounded-lg shadow-sm;
     @apply dark:bg-card-dark bg-card-light;
   }
   
@@ -50,6 +120,43 @@ body {
     @apply bg-gray-200 hover:bg-gray-300 text-gray-800;
     @apply dark:bg-[#333333] dark:hover:bg-[#3a3a3a] dark:text-gray-200;
   }
+}
+
+.ant-layout,
+.ant-layout-content {
+  background: transparent;
+}
+
+.ant-menu-dark,
+.ant-menu-dark .ant-menu-sub {
+  background: transparent;
+}
+
+.ant-menu-dark.ant-menu-inline .ant-menu-item {
+  color: #aab4c5;
+  border-radius: 6px;
+  margin-inline: 10px;
+  width: calc(100% - 20px);
+}
+
+.ant-menu-dark.ant-menu-inline .ant-menu-item-selected {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.ant-menu-dark.ant-menu-inline .ant-menu-item:not(.ant-menu-item-selected):hover {
+  background: #1a2435;
+  color: #ffffff;
+}
+
+.ant-menu-light.ant-menu-inline {
+  border-inline-end: 0;
+}
+
+.ant-menu-light.ant-menu-inline .ant-menu-item {
+  border-radius: 6px;
+  margin-inline: 10px;
+  width: calc(100% - 20px);
 }
 
 /* Search input placeholder styles */
