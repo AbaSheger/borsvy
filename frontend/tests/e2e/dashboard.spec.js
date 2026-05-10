@@ -239,11 +239,21 @@ test('mobile core routes fit without horizontal overflow', async ({ page, isMobi
 test('mobile dashboard tables do not clip numeric columns', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'Mobile table clipping check runs only in mobile projects');
 
+  await page.route('**/api/favorites', route => route.fulfill({
+    json: [{ symbol: 'NVDA', name: 'NVIDIA Corp', price: 215.55, changePercent: 1.99 }],
+  }));
   await page.goto('/');
   await page.waitForLoadState('networkidle');
 
+  await expect(page.getByRole('button', { name: /NVDA.*Last price/s })).toBeVisible();
+  await expect(page.getByRole('button', { name: /NVDA.*Last price/s })).toHaveCount(1);
+
   const clippedCells = await page.locator('.data-table th, .data-table td').evaluateAll(cells =>
     cells
+      .filter(cell => {
+        const rect = cell.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })
       .map(cell => {
         const rect = cell.getBoundingClientRect();
         const parentRect = cell.closest('.saas-panel, .rounded-lg, body').getBoundingClientRect();

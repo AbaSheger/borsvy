@@ -119,6 +119,45 @@ const StockRow = ({ symbol, name, fallbackPrice, fallbackChange, compact = false
   );
 };
 
+const WatchlistCard = ({ symbol, name, fallbackPrice, fallbackChange }) => {
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios.get(`/api/stocks/${symbol}`, axiosConfig)
+      .then(response => setData(response.data))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [symbol]);
+
+  const price = data?.price ?? fallbackPrice;
+  const changePercent = data?.changePercent ?? fallbackChange;
+  const openAnalysis = () => navigate(`/analysis/${symbol}`);
+
+  return (
+    <button
+      type="button"
+      onClick={openAnalysis}
+      className="w-full text-left px-4 py-3 border-t border-slate-200 dark:border-[#263142] hover:bg-slate-50 dark:hover:bg-[#1a2030] transition-colors"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-semibold text-slate-950 dark:text-slate-50">{symbol}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{data?.name || name || 'Market instrument'}</div>
+        </div>
+        <ChangeTag value={changePercent} />
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">Last price</span>
+        <span className="text-sm font-semibold tabular-nums text-slate-950 dark:text-slate-50 whitespace-nowrap">
+          {loading && price == null ? <Spin size="small" /> : fmtPrice(price)}
+        </span>
+      </div>
+    </button>
+  );
+};
+
 const DashboardPage = ({ favorites = [] }) => {
   const { theme } = useTheme();
   const activeWatchlist = favorites.slice(0, 7);
@@ -164,24 +203,10 @@ const DashboardPage = ({ favorites = [] }) => {
               </Link>
             </div>
           ) : (
-            <table className="data-table">
-              <colgroup>
-                <col className="w-[34%] sm:w-auto" />
-                <col className="w-[28%] sm:w-auto" />
-                <col className="w-[22%] sm:w-auto" />
-                <col className="w-[16%] sm:w-auto" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th className="text-left">Instrument</th>
-                  <th className="text-right">Last price</th>
-                  <th className="text-right">Change</th>
-                  <th className="text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              <div className="sm:hidden">
                 {activeWatchlist.map(stock => (
-                  <StockRow
+                  <WatchlistCard
                     key={stock.symbol}
                     symbol={stock.symbol}
                     name={stock.name}
@@ -189,8 +214,35 @@ const DashboardPage = ({ favorites = [] }) => {
                     fallbackChange={stock.changePercent}
                   />
                 ))}
-              </tbody>
-            </table>
+              </div>
+              <table className="data-table hidden sm:table">
+                <colgroup>
+                  <col className="w-auto" />
+                  <col className="w-auto" />
+                  <col className="w-auto" />
+                  <col className="w-auto" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="text-left">Instrument</th>
+                    <th className="text-right">Last price</th>
+                    <th className="text-right">Change</th>
+                    <th className="text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeWatchlist.map(stock => (
+                    <StockRow
+                      key={stock.symbol}
+                      symbol={stock.symbol}
+                      name={stock.name}
+                      fallbackPrice={stock.price}
+                      fallbackChange={stock.changePercent}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
 
