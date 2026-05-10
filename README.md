@@ -45,6 +45,48 @@ External data and AI providers:
 - RapidAPI Yahoo Finance fallback for news
 - Groq for AI analysis when configured
 
+## Screenshots
+
+Desktop dashboard:
+
+![Desktop dashboard](screenshots/dashboard-desktop.png)
+
+Desktop analysis workspace:
+
+![Desktop analysis workspace](screenshots/analysis-desktop.png)
+
+Mobile dashboard:
+
+![Mobile dashboard](screenshots/dashboard-mobile.png)
+
+Mobile portfolio:
+
+![Mobile portfolio](screenshots/portfolio-mobile.png)
+
+## Current Architecture
+
+```mermaid
+flowchart TD
+    User[Browser] --> Cloudflare[Cloudflare / DNS]
+    Cloudflare --> Nginx[Nginx on Hetzner]
+    Nginx --> Frontend[React static files<br/>/var/www/borsvy-frontend]
+    Nginx -->|/api/*| Backend[Spring Boot<br/>borsvy.service :8080]
+
+    Backend --> DB[(H2 file DB<br/>/var/lib/borsvy/borsvy)]
+    Backend --> Finnhub[Finnhub]
+    Backend --> TwelveData[Twelve Data]
+    Backend --> CoinGecko[CoinGecko fallback]
+    Backend --> NewsData[NewsData]
+    Backend --> RapidAPI[RapidAPI Yahoo Finance]
+    Backend --> Groq[Groq AI]
+
+    GitHub[GitHub Actions] -->|build/test/deploy| Hetzner[Hetzner VPS]
+    Hetzner --> Nginx
+    Hetzner --> Backend
+```
+
+The diagram reflects the current single-VPS production setup. The app can be moved to PostgreSQL later, but production currently defaults to file-based H2 unless environment variables override it.
+
 ## Repository Layout
 
 ```text
