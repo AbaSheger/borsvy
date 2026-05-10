@@ -49,7 +49,7 @@ const pageMeta = {
   '/profile': ['Profile', 'Account and plan settings'],
 };
 
-const SidebarNavigation = () => {
+const SidebarNavigation = ({ onNavigate }) => {
   const location = useLocation();
   const { theme } = useTheme();
 
@@ -70,11 +70,11 @@ const SidebarNavigation = () => {
       selectedKeys={getSelectedKeys()}
       className={theme === 'dark' ? 'bg-transparent border-0 px-0 py-3' : 'bg-white border-0 px-0 py-3'}
       items={[
-        { key: 'home', icon: <HomeOutlined />, label: <Link to="/">Dashboard</Link> },
-        { key: 'search', icon: <SearchOutlined />, label: <Link to="/search">Research</Link> },
-        { key: 'favorites', icon: <StarOutlined />, label: <Link to="/favorites">Watchlist</Link> },
-        { key: 'portfolio', icon: <FundOutlined />, label: <Link to="/portfolio">Portfolio</Link> },
-        { key: 'alerts', icon: <BellOutlined />, label: <Link to="/alerts">Alerts</Link> },
+        { key: 'home', icon: <HomeOutlined />, label: <Link to="/" onClick={onNavigate}>Dashboard</Link> },
+        { key: 'search', icon: <SearchOutlined />, label: <Link to="/search" onClick={onNavigate}>Research</Link> },
+        { key: 'favorites', icon: <StarOutlined />, label: <Link to="/favorites" onClick={onNavigate}>Watchlist</Link> },
+        { key: 'portfolio', icon: <FundOutlined />, label: <Link to="/portfolio" onClick={onNavigate}>Portfolio</Link> },
+        { key: 'alerts', icon: <BellOutlined />, label: <Link to="/alerts" onClick={onNavigate}>Alerts</Link> },
       ]}
     />
   );
@@ -139,6 +139,12 @@ const AppContent = () => {
     document.body.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768) {
+      setSidebarCollapsed(true);
+    }
+  };
+
   const fetchFavorites = async () => {
     try {
       setLoading(true);
@@ -177,7 +183,7 @@ const AppContent = () => {
           </Link>
         </div>
         <div className={`px-4 pt-4 pb-2 text-[11px] font-semibold uppercase ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Workspace</div>
-        <SidebarNavigation />
+        <SidebarNavigation onNavigate={closeSidebarOnMobile} />
       </Sider>
 
       <Layout className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-[256px]'}`}>

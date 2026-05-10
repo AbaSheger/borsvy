@@ -57,6 +57,13 @@ const priceHistory = [
   { timestamp: '2026-05-08T10:30:00', open: 417, high: 420, low: 416, price: 418.24, volume: 900 },
 ];
 
+const navigateBySidebar = async (page, isMobile, name) => {
+  if (isMobile) {
+    await page.getByRole('button', { name: /open navigation/i }).click();
+  }
+  await page.getByRole('link', { name }).click();
+};
+
 test.beforeEach(async ({ page }) => {
   const holdings = [];
   const alerts = [];
@@ -174,7 +181,7 @@ test('market overview cards navigate to stock analysis', async ({ page }) => {
   await expect(page.getByText('$415.14')).toBeVisible();
 });
 
-test('holistic app journey covers research, lazy analysis, portfolio, and alerts', async ({ page }) => {
+test('holistic app journey covers research, lazy analysis, portfolio, and alerts', async ({ page, isMobile }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
 
@@ -188,13 +195,13 @@ test('holistic app journey covers research, lazy analysis, portfolio, and alerts
   await page.getByRole('button', { name: 'News' }).click();
   await expect(page.getByText('Microsoft market update')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Research' }).click();
+  await navigateBySidebar(page, isMobile, 'Research');
   await expect(page.getByRole('heading', { name: 'Symbol search' })).toBeVisible();
   await page.getByPlaceholder(/Search stocks/i).fill('MSFT');
   await page.getByRole('button', { name: /^Search$/ }).click();
   await expect(page.getByText('Microsoft Corp').first()).toBeVisible();
 
-  await page.getByRole('link', { name: 'Portfolio' }).click();
+  await navigateBySidebar(page, isMobile, 'Portfolio');
   await expect(page.getByRole('heading', { name: 'Holdings' })).toBeVisible();
   await page.getByPlaceholder('Symbol').fill('MSFT');
   await page.getByPlaceholder('Shares').fill('2');
@@ -202,11 +209,29 @@ test('holistic app journey covers research, lazy analysis, portfolio, and alerts
   await page.getByRole('button', { name: 'Add' }).click();
   await expect(page.getByRole('button', { name: /MSFT/ })).toBeVisible();
 
-  await page.getByRole('link', { name: 'Alerts' }).click();
+  await navigateBySidebar(page, isMobile, 'Alerts');
   await expect(page.getByRole('heading', { name: /Price alerts/ })).toBeVisible();
   await page.getByPlaceholder('Symbol').fill('MSFT');
   await page.getByPlaceholder('Target price').fill('430');
   await page.getByRole('button', { name: 'Add alert' }).click();
   await expect(page.getByText('Price above')).toBeVisible();
   await expect(page.getByText('$430')).toBeVisible();
+});
+
+test('mobile core routes fit without horizontal overflow', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'Mobile layout check runs only in mobile projects');
+
+  const routes = ['/', '/search', '/portfolio', '/alerts', '/analysis/MSFT'];
+
+  for (const route of routes) {
+    await page.goto(route);
+    await page.waitForLoadState('networkidle');
+
+    const layout = await page.evaluate(() => ({
+      viewportWidth: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+  }
 });
