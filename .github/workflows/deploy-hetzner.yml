@@ -91,7 +91,6 @@ jobs:
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
           port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
-          script_stop: true
           script: |
             set -euxo pipefail
 
