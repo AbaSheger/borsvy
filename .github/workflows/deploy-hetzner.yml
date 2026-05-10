@@ -77,10 +77,17 @@ jobs:
             FRONTEND_DIR="${{ vars.HETZNER_FRONTEND_DIR || '/var/www/borsvy-frontend' }}"
             BACKEND_SERVICE="${{ vars.HETZNER_BACKEND_SERVICE || 'borsvy.service' }}"
             BRANCH="${{ vars.HETZNER_BRANCH || 'main' }}"
+            REPO_URL="https://github.com/${{ github.repository }}.git"
 
-            cd "$APP_DIR"
-            git fetch origin "$BRANCH"
-            git reset --hard "origin/$BRANCH"
+            if [ ! -d "$APP_DIR/.git" ]; then
+              sudo mkdir -p "$(dirname "$APP_DIR")"
+              sudo chown -R "$USER:$USER" "$(dirname "$APP_DIR")"
+              git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+            else
+              cd "$APP_DIR"
+              git fetch origin "$BRANCH"
+              git reset --hard "origin/$BRANCH"
+            fi
 
             cd "$APP_DIR/backend"
             chmod +x ./mvnw
