@@ -93,7 +93,7 @@ jobs:
           port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
           script_stop: true
           script: |
-            set -e
+            set -euxo pipefail
 
             APP_DIR="${{ vars.HETZNER_APP_DIR || '/var/www/borsvy' }}"
             FRONTEND_DIR="${{ vars.HETZNER_FRONTEND_DIR || '/var/www/borsvy-frontend' }}"
@@ -114,8 +114,12 @@ jobs:
             cd "$APP_DIR/backend"
             chmod +x ./mvnw
             ./mvnw clean package -DskipTests
+            sudo systemctl status "$BACKEND_SERVICE" --no-pager || true
             sudo systemctl restart "$BACKEND_SERVICE"
+            sudo systemctl status "$BACKEND_SERVICE" --no-pager
 
+            test -d /tmp/frontend-dist
+            ls -la /tmp/frontend-dist
             sudo mkdir -p "$FRONTEND_DIR"
             sudo rsync -a --delete /tmp/frontend-dist/ "$FRONTEND_DIR/"
             rm -rf /tmp/frontend-dist
