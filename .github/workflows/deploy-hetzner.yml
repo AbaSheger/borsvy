@@ -42,6 +42,12 @@ jobs:
         working-directory: frontend
         run: npm run test:e2e
 
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -62,6 +68,22 @@ jobs:
     environment: production
 
     steps:
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend-dist
+
+      - name: Upload frontend artifact to Hetzner
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
+          source: frontend-dist
+          target: /tmp
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -94,11 +116,9 @@ jobs:
             ./mvnw clean package -DskipTests
             sudo systemctl restart "$BACKEND_SERVICE"
 
-            cd "$APP_DIR/frontend"
-            npm ci
-            npm run build
             sudo mkdir -p "$FRONTEND_DIR"
-            sudo rsync -a --delete dist/ "$FRONTEND_DIR/"
+            sudo rsync -a --delete /tmp/frontend-dist/ "$FRONTEND_DIR/"
+            rm -rf /tmp/frontend-dist
 
             sudo nginx -t
             sudo systemctl reload nginx

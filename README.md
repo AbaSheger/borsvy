@@ -248,7 +248,7 @@ On every push to `main`, the workflow:
 6. Pulls the latest `main` branch.
 7. Builds the backend jar.
 8. Restarts the backend systemd service.
-9. Builds the frontend and syncs `frontend/dist` to the Nginx web root.
+9. Uploads the frontend build artifact and syncs it to the Nginx web root.
 10. Validates and reloads Nginx.
 
 Required GitHub repository secrets:
@@ -269,7 +269,7 @@ HETZNER_BACKEND_SERVICE  # Defaults to borsvy.service
 HETZNER_BRANCH           # Defaults to main
 ```
 
-The VPS should already have Node.js 18, Java 17, Maven wrapper support, Git, rsync, Nginx, and the backend systemd service configured. Production secrets such as database credentials and API keys should stay on the VPS in the systemd environment or environment file, not in GitHub Actions.
+The VPS should already have Java 17, Git, rsync, Nginx, and the backend systemd service configured. The frontend is built in GitHub Actions, so Node.js is not required on the VPS for deployment. Production secrets such as database credentials and API keys should stay on the VPS in the systemd environment or environment file, not in GitHub Actions.
 
 ### Environment Variables (for Production Deployment)
 
