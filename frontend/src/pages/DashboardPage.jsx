@@ -18,7 +18,7 @@ const ChangeTag = ({ value }) => {
   const pos = value >= 0;
 
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold ${pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+    <span className={`inline-flex items-center justify-end gap-1 whitespace-nowrap text-xs font-semibold ${pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
       {pos ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
       {pos ? '+' : ''}{Number(value).toFixed(2)}%
     </span>
@@ -93,12 +93,12 @@ const StockRow = ({ symbol, name, fallbackPrice, fallbackChange, compact = false
       }}
     >
       <td>
-        <div className="text-left group">
+        <div className="text-left group min-w-0">
           <div className="font-semibold text-slate-950 dark:text-slate-50 group-hover:text-blue-600 dark:group-hover:text-blue-400">{symbol}</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[220px]">{data?.name || name || 'Market instrument'}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{data?.name || name || 'Market instrument'}</div>
         </div>
       </td>
-      <td className="text-right tabular-nums text-slate-700 dark:text-slate-200">
+      <td className="text-right tabular-nums text-slate-700 dark:text-slate-200 whitespace-nowrap">
         {loading && price == null ? <Spin size="small" /> : fmtPrice(price)}
       </td>
       <td className="text-right"><ChangeTag value={changePercent} /></td>
@@ -165,6 +165,12 @@ const DashboardPage = ({ favorites = [] }) => {
             </div>
           ) : (
             <table className="data-table">
+              <colgroup>
+                <col className="w-[34%] sm:w-auto" />
+                <col className="w-[28%] sm:w-auto" />
+                <col className="w-[22%] sm:w-auto" />
+                <col className="w-[16%] sm:w-auto" />
+              </colgroup>
               <thead>
                 <tr>
                   <th className="text-left">Instrument</th>
@@ -194,6 +200,11 @@ const DashboardPage = ({ favorites = [] }) => {
             <h2 className="text-sm font-semibold text-slate-950 dark:text-slate-50 mt-1">Popular instruments</h2>
             <div className="mt-4 overflow-hidden border border-slate-200 dark:border-[#263142] rounded-lg">
               <table className="data-table">
+                <colgroup>
+                  <col className="w-[40%]" />
+                  <col className="w-[32%]" />
+                  <col className="w-[28%]" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th className="text-left">Symbol</th>

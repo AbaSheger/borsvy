@@ -235,3 +235,34 @@ test('mobile core routes fit without horizontal overflow', async ({ page, isMobi
     expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
   }
 });
+
+test('mobile dashboard tables do not clip numeric columns', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'Mobile table clipping check runs only in mobile projects');
+
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+
+  const clippedCells = await page.locator('.data-table th, .data-table td').evaluateAll(cells =>
+    cells
+      .map(cell => {
+        const rect = cell.getBoundingClientRect();
+        const parentRect = cell.closest('.saas-panel, .rounded-lg, body').getBoundingClientRect();
+        return {
+          text: cell.textContent.trim(),
+          left: rect.left,
+          right: rect.right,
+          parentLeft: parentRect.left,
+          parentRight: parentRect.right,
+          scrollWidth: cell.scrollWidth,
+          clientWidth: cell.clientWidth,
+        };
+      })
+      .filter(cell =>
+        cell.left < cell.parentLeft - 1 ||
+        cell.right > cell.parentRight + 1 ||
+        cell.scrollWidth > cell.clientWidth + 1
+      )
+  );
+
+  expect(clippedCells).toEqual([]);
+});
