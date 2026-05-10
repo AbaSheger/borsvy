@@ -41,6 +41,26 @@ public class TwelveDataClient {
         "MATIC", "LINK", "LTC", "BCH", "XLM", "ATOM", "UNI", "ALGO"
     );
 
+    private static final Map<String, String> COINGECKO_IDS = Map.ofEntries(
+        Map.entry("BTC", "bitcoin"),
+        Map.entry("ETH", "ethereum"),
+        Map.entry("BNB", "binancecoin"),
+        Map.entry("SOL", "solana"),
+        Map.entry("XRP", "ripple"),
+        Map.entry("ADA", "cardano"),
+        Map.entry("DOGE", "dogecoin"),
+        Map.entry("DOT", "polkadot"),
+        Map.entry("AVAX", "avalanche-2"),
+        Map.entry("MATIC", "matic-network"),
+        Map.entry("LINK", "chainlink"),
+        Map.entry("LTC", "litecoin"),
+        Map.entry("BCH", "bitcoin-cash"),
+        Map.entry("XLM", "stellar"),
+        Map.entry("ATOM", "cosmos"),
+        Map.entry("UNI", "uniswap"),
+        Map.entry("ALGO", "algorand")
+    );
+
     @Autowired
     public TwelveDataClient(@Value("${twelvedata.api.key}") String apiKey,
                             @Value("${twelvedata.api.url}") String baseUrl,
@@ -66,6 +86,10 @@ public class TwelveDataClient {
     /** Returns current quote data for a crypto symbol, or null on failure. */
     public Map<String, Object> getCryptoQuote(String symbol) {
         try {
+            if (apiKey == null || apiKey.isBlank()) {
+                return getCoinGeckoQuote(symbol);
+            }
+
             String resolvedSymbol = resolveSymbol(symbol);
             String url = String.format("%s/quote?symbol=%s&apikey=%s", baseUrl, resolvedSymbol, apiKey);
             logger.debug("Calling Twelve Data quote: {}", url.replace(apiKey, "API_KEY_REDACTED"));
@@ -94,6 +118,64 @@ public class TwelveDataClient {
         } catch (Exception e) {
             logger.warn("Error fetching crypto quote for {}: {}", symbol, e.getMessage());
             return null;
+        }
+    }
+
+    private Map<String, Object> getCoinGeckoQuote(String symbol) {
+        try {
+            String normalized = symbol == null ? "" : symbol.toUpperCase();
+            String coinId = COINGECKO_IDS.get(normalized);
+            if (coinId == null) {
+                return null;
+            }
+
+            String url = String.format(
+                "https://api.coingecko.com/api/v3/simple/price?ids=%s&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true",
+                coinId
+            );
+            logger.debug("Calling CoinGecko quote for {}", normalized);
+
+            String response = restTemplate.getForObject(url, String.class);
+            if (response == null) {
+                return null;
+            }
+
+            JsonNode root = objectMapper.readTree(response).path(coinId);
+            if (root.isMissingNode() || !root.has("usd")) {
+                return null;
+            }
+
+            double price = root.path("usd").asDouble(0);
+            double changePercent = root.path("usd_24h_change").asDouble(0);
+            double change = price * changePercent / 100.0;
+
+            Map<String, Object> quote = new java.util.HashMap<>();
+            quote.put("symbol", normalized);
+            quote.put("name", cryptoName(normalized));
+            quote.put("price", price);
+            quote.put("change", change);
+            quote.put("changePercent", changePercent);
+            quote.put("high", price);
+            quote.put("low", price);
+            quote.put("volume", root.path("usd_24h_vol").asLong(0));
+            quote.put("exchange", "Crypto");
+            return quote;
+        } catch (Exception e) {
+            logger.warn("Error fetching crypto quote from CoinGecko for {}: {}", symbol, e.getMessage());
+            return null;
+        }
+    }
+
+    private String cryptoName(String symbol) {
+        switch (symbol) {
+            case "BTC": return "Bitcoin";
+            case "ETH": return "Ethereum";
+            case "BNB": return "BNB";
+            case "SOL": return "Solana";
+            case "XRP": return "XRP";
+            case "ADA": return "Cardano";
+            case "DOGE": return "Dogecoin";
+            default: return symbol;
         }
     }
 
