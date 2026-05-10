@@ -113,6 +113,11 @@ jobs:
             cd "$APP_DIR/backend"
             chmod +x ./mvnw
             ./mvnw clean package -DskipTests
+            JAR_PATH="$(find target -maxdepth 1 -name '*.jar' ! -name '*.original' | head -n 1)"
+            test -n "$JAR_PATH"
+            sudo cp "$JAR_PATH" /root/backend-0.0.1-SNAPSHOT.jar
+            sudo chmod 644 /root/backend-0.0.1-SNAPSHOT.jar
+            sudo mkdir -p /var/lib/borsvy
             sudo systemctl status "$BACKEND_SERVICE" --no-pager || true
             sudo systemctl restart "$BACKEND_SERVICE"
             sudo systemctl status "$BACKEND_SERVICE" --no-pager
