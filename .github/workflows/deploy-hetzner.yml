@@ -51,7 +51,9 @@ jobs:
 
       - name: Compile backend
         working-directory: backend
-        run: ./mvnw -q -DskipTests compile
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -q -DskipTests compile
 
   deploy:
     name: Deploy
@@ -81,6 +83,7 @@ jobs:
             git reset --hard "origin/$BRANCH"
 
             cd "$APP_DIR/backend"
+            chmod +x ./mvnw
             ./mvnw clean package -DskipTests
             sudo systemctl restart "$BACKEND_SERVICE"
 
