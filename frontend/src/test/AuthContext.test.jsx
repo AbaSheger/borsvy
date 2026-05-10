@@ -20,16 +20,19 @@ const renderWithAuth = () =>
   );
 
 describe('AuthContext', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
 
-  it('starts in loading state then resolves to logged out', async () => {
-    axios.get.mockRejectedValueOnce(new Error('401'));
+  it('skips /api/auth/me when no session is known', async () => {
     const { getByText } = renderWithAuth();
-    expect(getByText('loading')).toBeInTheDocument();
     await waitFor(() => expect(getByText('not logged in')).toBeInTheDocument());
+    expect(axios.get).not.toHaveBeenCalled();
   });
 
   it('restores user from /api/auth/me on mount', async () => {
+    localStorage.setItem('borsvyAuthSession', '1');
     axios.get.mockResolvedValueOnce({ data: { email: 'alice@example.com' } });
     renderWithAuth();
     await waitFor(() =>
@@ -38,7 +41,6 @@ describe('AuthContext', () => {
   });
 
   it('login() sets user state', async () => {
-    axios.get.mockRejectedValueOnce(new Error('401')); // /me on mount
     axios.post.mockResolvedValueOnce({ data: { email: 'bob@example.com' } });
 
     let authCtx;
@@ -53,9 +55,11 @@ describe('AuthContext', () => {
       await authCtx.login('bob@example.com', 'password123');
     });
     expect(authCtx.user.email).toBe('bob@example.com');
+    expect(localStorage.getItem('borsvyAuthSession')).toBe('1');
   });
 
   it('logout() clears user state', async () => {
+    localStorage.setItem('borsvyAuthSession', '1');
     axios.get.mockResolvedValueOnce({ data: { email: 'alice@example.com' } });
     axios.post.mockResolvedValueOnce({});
 
@@ -71,6 +75,7 @@ describe('AuthContext', () => {
       await authCtx.logout();
     });
     expect(authCtx.user).toBeNull();
+    expect(localStorage.getItem('borsvyAuthSession')).toBeNull();
   });
 
   it('throws when useAuth is used outside AuthProvider', () => {
