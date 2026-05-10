@@ -276,3 +276,23 @@ test('mobile dashboard tables do not clip numeric columns', async ({ page, isMob
 
   expect(clippedCells).toEqual([]);
 });
+
+test('mobile theme toggle switches visible theme', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'Mobile theme check runs only in mobile projects');
+
+  await page.goto('/');
+
+  const initialDark = await page.evaluate(() => document.documentElement.classList.contains('dark'));
+  await page.getByRole('button', { name: /switch to/i }).click();
+
+  await expect.poll(() =>
+    page.evaluate(() => ({
+      htmlDark: document.documentElement.classList.contains('dark'),
+      bodyDark: document.body.classList.contains('dark'),
+      bodyBackground: getComputedStyle(document.body).backgroundColor,
+    }))
+  ).toMatchObject({
+    htmlDark: !initialDark,
+    bodyDark: !initialDark,
+  });
+});

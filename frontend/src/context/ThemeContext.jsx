@@ -22,12 +22,16 @@ export const ThemeProvider = ({ children }) => {
   // Apply theme changes to document
   useEffect(() => {
     const root = window.document.documentElement;
+    const body = window.document.body;
     
     // Remove old theme class
     root.classList.remove('light', 'dark');
+    body.classList.remove('light', 'dark');
     
     // Add new theme class
     root.classList.add(theme);
+    body.classList.add(theme);
+    root.style.colorScheme = theme;
     
     // Store theme preference in localStorage
     localStorage.setItem('theme', theme);

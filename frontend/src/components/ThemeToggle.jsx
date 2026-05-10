@@ -1,5 +1,4 @@
 import { MoonOutlined, SunOutlined } from '@ant-design/icons';
-import { Tooltip } from 'antd';
 import { useTheme } from '../context/ThemeContext';
 
 function ThemeToggle() {
@@ -7,15 +6,15 @@ function ThemeToggle() {
   const dark = theme === 'dark';
 
   return (
-    <Tooltip title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
-      <button
-        onClick={toggleTheme}
-        className="h-9 w-9 rounded-md grid place-items-center text-slate-500 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202838] transition-colors"
-        aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-      >
-        {dark ? <SunOutlined /> : <MoonOutlined />}
-      </button>
-    </Tooltip>
+    <button
+      type="button"
+      onClick={toggleTheme}
+      title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      className="h-9 w-9 rounded-md grid place-items-center text-slate-500 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202838] transition-colors"
+      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {dark ? <SunOutlined /> : <MoonOutlined />}
+    </button>
   );
 }
 
