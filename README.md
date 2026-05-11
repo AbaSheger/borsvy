@@ -337,6 +337,15 @@ Nginx API proxy:       /api/ -> http://localhost:8080/api/
 
 Nginx serves the frontend and proxies API requests to the Spring Boot service.
 
+Operational work covered by this project includes:
+
+- GitHub Actions deployment to a single Hetzner VPS.
+- systemd-managed Spring Boot backend runtime.
+- Nginx static frontend hosting and API reverse proxying.
+- Production secret rotation workflow for third-party API credentials.
+- Health-check based backend restart verification.
+- A documented secret-rotation runbook for repeatable production maintenance.
+
 Useful server commands:
 
 ```bash
@@ -344,6 +353,98 @@ systemctl status borsvy.service --no-pager
 journalctl -u borsvy.service -n 120 --no-pager
 nginx -t
 systemctl reload nginx
+```
+
+### Production Secret Rotation Runbook
+
+Production backend secrets are currently loaded from:
+
+```text
+/root/application-prod.properties
+```
+
+The systemd service starts the backend through:
+
+```text
+/root/start-borsvy.sh
+```
+
+and passes:
+
+```text
+--spring.config.additional-location=file:/root/application-prod.properties
+```
+
+When an API key or auth secret is exposed, treat it as compromised even if it has since been removed from the current branch. Git history, build logs, screenshots, or copied terminal output may still contain the old value.
+
+Rotate the affected provider keys in the provider dashboards first, then update the Hetzner file:
+
+```bash
+sudo nano /root/application-prod.properties
+```
+
+Expected production properties include:
+
+```properties
+finnhub.api.key=...
+serpapi.api.key=...
+polygon.api.key=...
+rapidapi.api.key=...
+rapidapi.api.host=finance-news22.p.rapidapi.com
+groq.api.key=...
+groq.model.id=llama-3.3-70b-versatile
+allowed.origins=*
+jwt.secret=...
+```
+
+Generate a new JWT signing secret when rotating auth:
+
+```bash
+openssl rand -base64 48
+```
+
+`jwt.secret` must be a single line. If the value wraps onto a second standalone line, delete both JWT lines and paste a freshly generated value as one line:
+
+```properties
+jwt.secret=single-line-secret-value
+```
+
+In nano:
+
+```text
+Ctrl+O  save
+Enter   confirm filename
+Ctrl+X  exit
+```
+
+Restart and verify:
+
+```bash
+sudo systemctl restart borsvy.service
+sudo systemctl status borsvy.service --no-pager
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+Use this command to confirm secret fields exist without printing values:
+
+```bash
+sudo awk -F= '
+BEGIN { IGNORECASE=1 }
+$1 ~ /(api\.key|secret|password|token)/ { print $1"=<redacted>"; next }
+{ print }
+' /root/application-prod.properties
+```
+
+The output should include `jwt.secret=<redacted>` and should not include any random-looking standalone line after it.
+
+After production is healthy, revoke or delete the old exposed keys in each provider dashboard. For this project, check:
+
+```text
+Finnhub
+SerpAPI
+Polygon
+RapidAPI
+Groq
 ```
 
 ## GitHub Actions Deploy
