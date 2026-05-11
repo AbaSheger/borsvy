@@ -1,5 +1,7 @@
 # BorsVy
 
+[![Deploy to Hetzner](https://github.com/AbaSheger/borsvy/actions/workflows/deploy-hetzner.yml/badge.svg)](https://github.com/AbaSheger/borsvy/actions/workflows/deploy-hetzner.yml)
+
 BorsVy is a SaaS-style market intelligence app for stock and crypto research. It has a React/Vite frontend, a Spring Boot backend, GitHub Actions verification, and automated deployment to a Hetzner VPS behind Nginx and HTTPS.
 
 Live site: https://borsvy.abenezeranglo.uk/
@@ -63,6 +65,24 @@ Mobile portfolio:
 
 ![Mobile portfolio](screenshots/portfolio-mobile.png)
 
+Dark-mode dashboard:
+
+![Dark-mode dashboard](screenshots/dashboard-dark-desktop.png)
+
+## Portfolio Case Study
+
+This project was built as a production-style full-stack portfolio project rather than a regulated investment product. The goal was to demonstrate end-to-end product engineering: a usable React SaaS interface, a Java backend, third-party API integration, mobile quality checks, CI/CD, and a real VPS deployment.
+
+Key engineering decisions:
+- **Same-origin production API:** The frontend calls `/api/...` in production and Nginx proxies requests to Spring Boot. This avoids browser CORS complexity in production.
+- **Lazy analysis loading:** Expensive AI and news requests are loaded only when the user opens those tabs, reducing initial dashboard latency and API cost.
+- **Provider fallbacks:** Crypto quotes can fall back to CoinGecko when Twelve Data is not configured. News can fall back to RapidAPI when NewsData is unavailable.
+- **Mobile-first verification:** Playwright runs both desktop and mobile projects, including route overflow checks, mobile table clipping checks, and theme-toggle checks.
+- **Simple VPS deployment:** GitHub Actions builds/tests the app, uploads the frontend artifact, builds the backend jar on Hetzner, restarts systemd, and reloads Nginx.
+
+Important product boundary:
+- BorsVy is framed as market information and company/news briefing software. It is not intended to provide investment, financial, tax, or legal advice.
+
 ## Current Architecture
 
 ```mermaid
@@ -91,28 +111,31 @@ The diagram reflects the current single-VPS production setup. The app can be mov
 
 ```text
 .
-├── .github/workflows/deploy-hetzner.yml
-├── backend
-│   ├── pom.xml
-│   ├── mvnw / mvnw.cmd
-│   └── src/main
-│       ├── java/com/borsvy
-│       │   ├── client
-│       │   ├── controller
-│       │   ├── model
-│       │   ├── repository
-│       │   ├── security
-│       │   └── service
-│       └── resources
-│           ├── application.properties
-│           ├── application-prod.properties
-│           └── db/migration
-├── frontend
-│   ├── package.json
-│   ├── playwright.config.js
-│   ├── src
-│   └── tests/e2e
-└── README.md
+|-- .github/workflows/deploy-hetzner.yml
+|-- backend
+|   |-- .env.example
+|   |-- pom.xml
+|   |-- mvnw / mvnw.cmd
+|   `-- src/main
+|       |-- java/com/borsvy
+|       |   |-- client
+|       |   |-- controller
+|       |   |-- model
+|       |   |-- repository
+|       |   |-- security
+|       |   `-- service
+|       `-- resources
+|           |-- application.properties
+|           |-- application-prod.properties
+|           `-- db/migration
+|-- frontend
+|   |-- .env.example
+|   |-- package.json
+|   |-- playwright.config.js
+|   |-- src
+|   `-- tests/e2e
+|-- screenshots
+`-- README.md
 ```
 
 ## Local Development
@@ -126,6 +149,7 @@ Start the backend:
 
 ```bash
 cd backend
+cp .env.example .env
 ./mvnw spring-boot:run
 ```
 
@@ -133,6 +157,7 @@ On Windows PowerShell:
 
 ```powershell
 cd backend
+Copy-Item .env.example .env
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -141,6 +166,7 @@ Start the frontend:
 ```bash
 cd frontend
 npm ci
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -217,6 +243,8 @@ For the Hetzner/Nginx deployment this is usually left empty so the frontend call
 Main routes include:
 
 ```text
+GET  /api/health
+
 GET  /api/stocks/market-overview
 GET  /api/stocks/{symbol}
 GET  /api/stocks/search?query=...
@@ -247,6 +275,8 @@ POST /api/auth/logout
 ```
 
 `GET /api/auth/me` returns `401` when the visitor is logged out. That is expected behavior.
+
+`GET /api/health` returns a lightweight status payload for deployment checks and uptime monitoring.
 
 ## Testing
 
@@ -339,6 +369,7 @@ Deploy job:
 - Builds the backend jar on the VPS.
 - Copies the jar to `/root/backend-0.0.1-SNAPSHOT.jar`.
 - Restarts `borsvy.service`.
+- Waits for `/api/health` before continuing.
 - Syncs frontend files to `/var/www/borsvy-frontend`.
 - Validates and reloads Nginx.
 
@@ -383,9 +414,18 @@ HETZNER_BRANCH=main
 
 - Cloudflare may cache old frontend assets. Purge Cloudflare cache if the deployed UI appears stale.
 - The backend may return `401` for `/api/auth/me` when logged out; that is normal.
-- Java startup takes roughly 10-15 seconds on the current VPS, so API requests can briefly fail during a restart.
+- Java startup takes roughly 10-15 seconds on the current VPS. The deploy workflow waits for `/api/health` after restart.
 - The app currently uses H2 storage by default in production. Use PostgreSQL before expecting multi-user durability at scale.
 - Some browser console messages such as `A listener indicated an asynchronous response...` can come from browser extensions. Incognito testing confirmed this is not from the app.
+
+## Known Limitations
+
+- This is a portfolio project, not a regulated financial-advice product.
+- Market data depends on third-party providers and may be delayed, unavailable, or rate-limited.
+- Free/personal API plans may not be appropriate for a commercial SaaS launch.
+- H2 is the default production database for this prototype; PostgreSQL is recommended for real users.
+- The deploy currently restarts the backend in place, so brief API downtime can happen during deployment.
+- AI summaries should be treated as informational summaries, not trading recommendations.
 
 ## Scalability Notes
 
@@ -393,7 +433,7 @@ This is suitable for a small SaaS prototype on a single VPS. Before serious prod
 
 - Move from H2 to PostgreSQL.
 - Put backend secrets in a systemd environment file or a secrets manager.
-- Add health checks and deploy only after the backend is ready.
+- Reduce restart downtime further with blue/green or rolling deploys.
 - Add caching/rate limiting around external market data APIs.
 - Add structured logging and monitoring.
 - Add database backups.

@@ -120,6 +120,16 @@ jobs:
             sudo mkdir -p /var/lib/borsvy
             sudo systemctl status "$BACKEND_SERVICE" --no-pager || true
             sudo systemctl restart "$BACKEND_SERVICE"
+            for attempt in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                sudo journalctl -u "$BACKEND_SERVICE" -n 120 --no-pager
+                exit 1
+              fi
+              sleep 2
+            done
             sudo systemctl status "$BACKEND_SERVICE" --no-pager
 
             test -d /tmp/frontend-dist
