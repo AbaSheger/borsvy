@@ -41,10 +41,14 @@ yarn-error.log*
 
 # Environment variables
 .env
+.env.prod
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+backend/application-prod.properties
+backend/backend-run.log
+.claude/
 
 # Maven
 backend/target/
