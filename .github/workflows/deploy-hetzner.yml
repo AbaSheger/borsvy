@@ -55,11 +55,19 @@ jobs:
           java-version: 17
           cache: maven
 
-      - name: Compile backend
+      - name: Package backend
         working-directory: backend
         run: |
           chmod +x ./mvnw
-          ./mvnw -q -DskipTests compile
+          ./mvnw -q -DskipTests package
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: |
+            backend/target/*.jar
+            !backend/target/*.original
 
   deploy:
     name: Deploy
@@ -74,6 +82,12 @@ jobs:
           name: frontend-dist
           path: frontend-dist
 
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: backend-jar
+
       - name: Upload frontend artifact to Hetzner
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -82,6 +96,16 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
           source: frontend-dist
+          target: /tmp
+
+      - name: Upload backend artifact to Hetzner
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || '22' }}
+          source: backend-jar
           target: /tmp
 
       - name: Deploy over SSH
@@ -94,29 +118,17 @@ jobs:
           script: |
             set -euxo pipefail
 
-            APP_DIR="${{ vars.HETZNER_APP_DIR || '/var/www/borsvy' }}"
             FRONTEND_DIR="${{ vars.HETZNER_FRONTEND_DIR || '/var/www/borsvy-frontend' }}"
             BACKEND_SERVICE="${{ vars.HETZNER_BACKEND_SERVICE || 'borsvy.service' }}"
-            BRANCH="${{ vars.HETZNER_BRANCH || 'main' }}"
-            REPO_URL="https://github.com/${{ github.repository }}.git"
 
-            if [ ! -d "$APP_DIR/.git" ]; then
-              sudo mkdir -p "$(dirname "$APP_DIR")"
-              sudo chown -R "$USER:$USER" "$(dirname "$APP_DIR")"
-              git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
-            else
-              cd "$APP_DIR"
-              git fetch origin "$BRANCH"
-              git reset --hard "origin/$BRANCH"
-            fi
-
-            cd "$APP_DIR/backend"
-            chmod +x ./mvnw
-            ./mvnw clean package -DskipTests
-            JAR_PATH="$(find target -maxdepth 1 -name '*.jar' ! -name '*.original' | head -n 1)"
+            test -d /tmp/backend-jar
+            ls -la /tmp/backend-jar
+            JAR_PATH="$(find /tmp/backend-jar -type f -name '*.jar' ! -name '*.original' | head -n 1)"
             test -n "$JAR_PATH"
             sudo cp "$JAR_PATH" /root/backend-0.0.1-SNAPSHOT.jar
             sudo chmod 644 /root/backend-0.0.1-SNAPSHOT.jar
+            rm -rf /tmp/backend-jar
+
             sudo mkdir -p /var/lib/borsvy
             sudo systemctl status "$BACKEND_SERVICE" --no-pager || true
             sudo systemctl restart "$BACKEND_SERVICE"

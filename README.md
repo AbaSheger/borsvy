@@ -78,7 +78,7 @@ Key engineering decisions:
 - **Lazy analysis loading:** Expensive AI and news requests are loaded only when the user opens those tabs, reducing initial dashboard latency and API cost.
 - **Provider fallbacks:** Crypto quotes can fall back to CoinGecko when Twelve Data is not configured. News can fall back to RapidAPI when NewsData is unavailable.
 - **Mobile-first verification:** Playwright runs both desktop and mobile projects, including route overflow checks, mobile table clipping checks, and theme-toggle checks.
-- **Simple VPS deployment:** GitHub Actions builds/tests the app, uploads the frontend artifact, builds the backend jar on Hetzner, restarts systemd, and reloads Nginx.
+- **Simple VPS deployment:** GitHub Actions builds/tests the app, uploads frontend and backend artifacts to Hetzner, restarts systemd, and reloads Nginx.
 
 Important product boundary:
 - BorsVy is framed as market information and company/news briefing software. It is not intended to provide investment, financial, tax, or legal advice.
@@ -328,7 +328,6 @@ Production is currently deployed to a Hetzner VPS:
 
 ```text
 Frontend static root: /var/www/borsvy-frontend
-Repo checkout:         /var/www/borsvy
 Backend jar path:      /root/backend-0.0.1-SNAPSHOT.jar
 Backend service:       borsvy.service
 Backend port:          8080
@@ -461,13 +460,13 @@ Verify job:
 - Runs Playwright e2e tests.
 - Uploads the frontend `dist` artifact.
 - Sets up Java 17.
-- Compiles the backend.
+- Packages the backend jar.
+- Uploads the backend jar artifact.
 
 Deploy job:
 - Downloads the frontend artifact.
-- Uploads it to the VPS.
-- Pulls/resets the repo under `/var/www/borsvy`.
-- Builds the backend jar on the VPS.
+- Downloads the backend jar artifact.
+- Uploads both artifacts to the VPS.
 - Copies the jar to `/root/backend-0.0.1-SNAPSHOT.jar`.
 - Restarts `borsvy.service`.
 - Waits for `/api/health` before continuing.
@@ -496,19 +495,15 @@ Do not commit the private SSH key. Store it only in GitHub Secrets.
 Optional GitHub repository variables:
 
 ```text
-HETZNER_APP_DIR
 HETZNER_FRONTEND_DIR
 HETZNER_BACKEND_SERVICE
-HETZNER_BRANCH
 ```
 
 Defaults:
 
 ```text
-HETZNER_APP_DIR=/var/www/borsvy
 HETZNER_FRONTEND_DIR=/var/www/borsvy-frontend
 HETZNER_BACKEND_SERVICE=borsvy.service
-HETZNER_BRANCH=main
 ```
 
 ## Current Production Notes
