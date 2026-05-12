@@ -220,7 +220,7 @@ public class RapidApiClient {
         
         try (AsyncHttpClient client = new DefaultAsyncHttpClient()) {
             // Get the company name for better filtering
-            String companyName = getCompanyNameForSymbol(symbol);
+            String companyName = RapidApiNewsMetadata.getCompanyNameForSymbol(symbol);
             
             // Create URL for Yahoo Finance API
             String url = "https://yahoo-finance166.p.rapidapi.com/api/news/list-by-symbol";
@@ -359,7 +359,9 @@ public class RapidApiClient {
     
     // Helper method to count keywords
     private int countKeywords(String text, boolean positiveKeywords) {
-        String[] keywords = positiveKeywords ? getPositiveKeywords() : getNegativeKeywords();
+        String[] keywords = positiveKeywords
+            ? RapidApiNewsMetadata.POSITIVE_KEYWORDS
+            : RapidApiNewsMetadata.NEGATIVE_KEYWORDS;
         int count = 0;
         
         for (String keyword : keywords) {
@@ -393,16 +395,7 @@ public class RapidApiClient {
     
     // Strong negative indicators that should override other analysis
     private boolean containsStrongNegativeIndicators(String text) {
-        String[] strongNegatives = {
-            "stock down", "stocks down", "shares down", "shares fall", "stock falls", "stocks fall",
-            "market crash", "stock crash", "shares crash", "sell-off", "selling off",
-            "worst day", "worst week", "worst month", "big drop", "sharp decline",
-            "heavy losses", "major losses", "tumbles", "plunges", "disaster",
-            "disappointing earnings", "missed expectations", "below forecast",
-            "layoffs", "job cuts", "bankruptcy", "class action", "fraud", "investigation"
-        };
-        
-        for (String phrase : strongNegatives) {
+        for (String phrase : RapidApiNewsMetadata.STRONG_NEGATIVE_INDICATORS) {
             if (text.contains(phrase)) {
                 log.debug("Found strong negative indicator: '{}'", phrase);
                 return true;
@@ -414,16 +407,7 @@ public class RapidApiClient {
     
     // Strong positive indicators that should override other analysis
     private boolean containsStrongPositiveIndicators(String text) {
-        String[] strongPositives = {
-            "stock up", "stocks up", "shares up", "shares rise", "stock rises", "stocks rise",
-            "breakout", "record high", "all-time high", "new high", "multi-year high",
-            "beats expectations", "exceeds forecast", "strong earnings", "strong quarter",
-            "dividend increase", "raised guidance", "buy rating", "strong buy",
-            "best day", "best week", "best month", "big gain", "sharp increase",
-            "major gains", "soars", "surges", "rallies", "jumps"
-        };
-        
-        for (String phrase : strongPositives) {
+        for (String phrase : RapidApiNewsMetadata.STRONG_POSITIVE_INDICATORS) {
             if (text.contains(phrase)) {
                 log.debug("Found strong positive indicator: '{}'", phrase);
                 return true;
@@ -431,28 +415,6 @@ public class RapidApiClient {
         }
         
         return false;
-    }
-    
-    // Get a refined list of positive keywords
-    private String[] getPositiveKeywords() {
-        return new String[] {
-            // Strong positive financial terms
-            "rally", "surge", "soar", "jump", "beat expectations", "exceed estimates",
-            "upgrade", "bullish", "buy rating", "outperform", "strong growth",
-            "record revenue", "record profit", "market leader", "increased dividend",
-            "profit", "profitable", "promising", "momentum", "recovery", "breakthrough"
-        };
-    }
-    
-    // Get a refined list of negative keywords
-    private String[] getNegativeKeywords() {
-        return new String[] {
-            // Strong negative financial terms
-            "decline", "drop", "fall", "slip", "slump", "tumble", "plunge", "crash",
-            "bearish", "downgrade", "sell rating", "underperform", "miss expectations",
-            "below estimates", "downside", "negative", "weak", "loss", "struggling",
-            "concern", "risk", "uncertainty", "volatility", "warning", "crisis"
-        };
     }
     
     /**
@@ -467,7 +429,7 @@ public class RapidApiClient {
             String summary = item.has("description") ? item.get("description").asText() : "";
             
             // Use a default thumbnail if none is available
-            String thumbnail = getDefaultThumbnailForSource(source);
+            String thumbnail = RapidApiNewsMetadata.getDefaultThumbnailForSource(source);
             
             return new NewsArticle(title, summary, url, thumbnail);
         } catch (Exception e) {
@@ -755,7 +717,7 @@ public class RapidApiClient {
             }
             
             if (thumbnail == null || thumbnail.isEmpty()) {
-                thumbnail = getDefaultThumbnailForSource(source);
+                thumbnail = RapidApiNewsMetadata.getDefaultThumbnailForSource(source);
                 log.debug("Using default thumbnail for article '{}': {}", title, thumbnail);
             }
             
@@ -766,38 +728,6 @@ public class RapidApiClient {
             log.error("Error extracting article: {}", e.getMessage());
             return null;
         }
-    }
-    
-    /**
-     * Get a default thumbnail based on the news source
-     */
-    private String getDefaultThumbnailForSource(String source) {
-        if (source == null) {
-            return getDefaultFinancialThumbnail();
-        }
-        
-        // Map common news sources to their default thumbnails
-        Map<String, String> sourceThumbnails = new HashMap<>();
-        sourceThumbnails.put("Yahoo Finance", "https://s.yimg.com/ny/api/res/1.2/2Qq8o3Ld_2PqL2K5L1XzGA--/YXBwaWQ9aGlnaGxhbmRlcjt3PTk2MDtoPTU0MDtjZj13ZWJw/https://s.yimg.com/uu/api/res/1.2/QxV2bGVfSVFnb2x3X1F3Z2t3L2h0dHBzOi8vd3d3LnlhaG9vLmNvbS9maW5hbmNlL2ltYWdlcy9kZWZhdWx0L2ZpbmFuY2lhbC1uZXdzLmpwZw--");
-        sourceThumbnails.put("Reuters", "https://www.reuters.com/pf/resources/images/reuters/reuters-default.png");
-        sourceThumbnails.put("Bloomberg", "https://assets.bwbx.io/s3/javelin/public/javelin/images/social-default-a4f15fa7ee.jpg");
-        sourceThumbnails.put("CNBC", "https://www.cnbc.com/pf/resources/images/CNBC_logo_reuters.png");
-        sourceThumbnails.put("MarketWatch", "https://s.marketwatch.com/public/resources/images/MW-HP535_market_ZH_20190123153019.jpg");
-        sourceThumbnails.put("Business Insider", "https://static.businessinsider.com/image/5d9d8b7c6f24eb1a0a2b3b5a-1200.jpg");
-        sourceThumbnails.put("Investor's Business Daily", "https://www.investors.com/wp-content/uploads/2019/01/IBD-logo.png");
-        sourceThumbnails.put("The Wall Street Journal", "https://s.wsj.net/img/WSJ_Logo_black_social.png");
-        sourceThumbnails.put("Barrons.com", "https://www.barrons.com/assets/img/barrons-logo.png");
-        sourceThumbnails.put("Motley Fool", "https://g.foolcdn.com/art/companylogos/square/tmf.png");
-        sourceThumbnails.put("Fortune", "https://fortune.com/favicon.ico");
-        sourceThumbnails.put("The Real Deal", "https://therealdeal.com/wp-content/uploads/2019/05/trd-logo.png");
-        sourceThumbnails.put("Insider Monkey", "https://www.insidermonkey.com/blog/wp-content/uploads/2019/01/insider-monkey-logo.png");
-        sourceThumbnails.put("Benzinga", "https://cdn.benzinga.com/files/images/story/2012/benzinga-logo.png");
-        sourceThumbnails.put("Investopedia", "https://www.investopedia.com/thmb/0YHt1qQvQw7Ckf6ENJh0QjXF8b4=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/InvestopediaLogo-9c5b0a7f0b4b4798b0bfde9d5b0b8b3a.png");
-        sourceThumbnails.put("etf.com", "https://www.etf.com/sites/default/files/etf-com-logo.png");
-        sourceThumbnails.put("TheStreet", "https://www.thestreet.com/.image/t_share/MTc0NDU4NDg5ODQ5NDQ5NDQ5/thestreet-logo.png");
-        sourceThumbnails.put("CIO Dive", "https://www.ciodive.com/img/ciodive-logo.png");
-        
-        return sourceThumbnails.getOrDefault(source, getDefaultFinancialThumbnail());
     }
     
     /**
@@ -914,125 +844,11 @@ public class RapidApiClient {
     }
     
     /**
-     * Get default financial thumbnail
-     */
-    private String getDefaultFinancialThumbnail() {
-        return "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop";
-    }
-    
-    /**
-     * Map stock symbol to company name
-     */
-    private String getCompanyNameForSymbol(String symbol) {
-        Map<String, String> companyNames = new HashMap<>();
-        // Tech Companies
-        companyNames.put("AAPL", "Apple");
-        companyNames.put("MSFT", "Microsoft");
-        companyNames.put("GOOGL", "Google");
-        companyNames.put("GOOG", "Google");
-        companyNames.put("AMZN", "Amazon");
-        companyNames.put("META", "Meta");
-        companyNames.put("NVDA", "Nvidia");
-        companyNames.put("TSLA", "Tesla");
-        companyNames.put("AMD", "Advanced Micro Devices");
-        companyNames.put("INTC", "Intel");
-        companyNames.put("CRM", "Salesforce");
-        companyNames.put("ADBE", "Adobe");
-        companyNames.put("NFLX", "Netflix");
-        companyNames.put("CSCO", "Cisco");
-        
-        // Financial Companies
-        companyNames.put("JPM", "JPMorgan Chase");
-        companyNames.put("BAC", "Bank of America");
-        companyNames.put("WFC", "Wells Fargo");
-        companyNames.put("GS", "Goldman Sachs");
-        companyNames.put("MS", "Morgan Stanley");
-        companyNames.put("V", "Visa");
-        companyNames.put("MA", "Mastercard");
-        companyNames.put("AXP", "American Express");
-        
-        // Retail & Consumer
-        companyNames.put("WMT", "Walmart");
-        companyNames.put("TGT", "Target");
-        companyNames.put("COST", "Costco");
-        companyNames.put("HD", "Home Depot");
-        companyNames.put("LOW", "Lowe's");
-        companyNames.put("NKE", "Nike");
-        companyNames.put("SBUX", "Starbucks");
-        companyNames.put("MCD", "McDonald's");
-        
-        // Healthcare
-        companyNames.put("JNJ", "Johnson & Johnson");
-        companyNames.put("PFE", "Pfizer");
-        companyNames.put("MRNA", "Moderna");
-        companyNames.put("UNH", "UnitedHealth");
-        companyNames.put("CVS", "CVS Health");
-        
-        // Telecom & Media
-        companyNames.put("T", "AT&T");
-        companyNames.put("VZ", "Verizon");
-        companyNames.put("CMCSA", "Comcast");
-        companyNames.put("DIS", "Disney");
-        
-        // Energy & Industrial
-        companyNames.put("XOM", "ExxonMobil");
-        companyNames.put("CVX", "Chevron");
-        companyNames.put("BA", "Boeing");
-        companyNames.put("GE", "General Electric");
-        companyNames.put("F", "Ford");
-        companyNames.put("GM", "General Motors");
-        
-        // Try to get the exact match first
-        String companyName = companyNames.get(symbol);
-        if (companyName != null) {
-            return companyName;
-        }
-        
-        // If no exact match, try to extract company name from symbol
-        // This handles cases where we don't have the symbol in our map
-        if (symbol.length() > 1) {
-            // Remove common suffixes that might appear in stock symbols
-            String[] suffixes = {".US", "-US", ".L", ".TO", "-A", "-B", ".A", ".B", ".PR", ".PF"};
-            String cleanSymbol = symbol;
-            for (String suffix : suffixes) {
-                if (cleanSymbol.endsWith(suffix)) {
-                    cleanSymbol = cleanSymbol.substring(0, cleanSymbol.length() - suffix.length());
-                    break;
-                }
-            }
-            return cleanSymbol; // Return the cleaned symbol as a fallback
-        }
-        
-        return symbol; // Return the original symbol if all else fails
-    }
-    
-    /**
      * Check if text contains positive keywords
      */
     private boolean containsPositiveKeywords(String text) {
-        String[] keywords = {
-            // Basic positive terms
-            "up", "rise", "gain", "positive", "strong", "growth", "profit", "success",
-            // Expanded financial positive terms
-            "outperform", "beat", "exceed", "upgrade", "bullish", "rally", "surge", "soar", 
-            "jump", "boost", "upside", "opportunity", "recovery", "breakthrough", "momentum", 
-            "optimistic", "promising", "favorable", "advantage", "strength", "performance",
-            // Specific financial positive phrases
-            "above consensus", "buy rating", "price target increase", "new high", "dividend increase",
-            "beat earnings", "revenue growth", "market leader", "cost reduction", "synergies",
-            "strategic acquisition", "expansion", "innovation", "improved guidance",
-            // Additional terms
-            "biggest bargain", "investing aggressively", "all-time high", "stock rise", "stocks rise",
-            // Modern terms
-            "AI", "artificial intelligence", "blockchain", "crypto", "metaverse", "cloud computing",
-            "digital transformation", "e-commerce", "streaming", "subscription", "recurring revenue",
-            "market share", "competitive advantage", "moat", "scalable", "disruptive", "innovative",
-            "partnership", "collaboration", "integration", "acquisition", "merger", "deal",
-            "expansion", "growth", "scale", "efficiency", "productivity", "automation"
-        };
-        
         text = text.toLowerCase();
-        for (String keyword : keywords) {
+        for (String keyword : RapidApiNewsMetadata.BROAD_POSITIVE_KEYWORDS) {
             if (text.contains(keyword.toLowerCase())) {
                 log.debug("Found positive keyword: '{}' in text", keyword);
                 return true;
@@ -1045,31 +861,8 @@ public class RapidApiClient {
      * Check if text contains negative keywords
      */
     private boolean containsNegativeKeywords(String text) {
-        String[] keywords = {
-            // Basic negative terms
-            "down", "fall", "drop", "negative", "weak", "loss", "decline", "miss",
-            // Expanded financial negative terms
-            "underperform", "downgrade", "bearish", "sink", "plunge", "tumble", "slip", "slump",
-            "crash", "recession", "sell-off", "downside", "risk", "concern", "disappoint", "struggle",
-            "pressure", "uncertainty", "volatility", "warning", "crisis", "challenge", "headwind",
-            // Specific financial negative phrases
-            "below estimates", "sell rating", "price target cut", "new low", "dividend cut",
-            "missed earnings", "revenue decline", "competitive pressure", "cost increase", "debt",
-            "restructuring", "layoffs", "downtime", "investigation", "lawsuit", "recall",
-            "regulatory issue", "delayed", "lowered guidance", "margin pressure",
-            // Additional terms
-            "crushing", "tariffs", "export controls", "falling", "trading lower", "stock down",
-            // Modern terms
-            "cybersecurity", "data breach", "privacy", "regulation", "compliance", "fine",
-            "penalty", "investigation", "lawsuit", "class action", "settlement", "violation",
-            "hack", "outage", "downtime", "disruption", "supply chain", "shortage", "inflation",
-            "interest rates", "rate hike", "recession", "slowdown", "downturn", "correction",
-            "bubble", "overvalued", "valuation", "expensive", "premium", "competition",
-            "market share loss", "subscriber loss", "user decline", "engagement drop"
-        };
-        
         text = text.toLowerCase();
-        for (String keyword : keywords) {
+        for (String keyword : RapidApiNewsMetadata.BROAD_NEGATIVE_KEYWORDS) {
             if (text.contains(keyword.toLowerCase())) {
                 log.debug("Found negative keyword: '{}' in text", keyword);
                 return true;

@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,8 @@ public class StockController {
     private final StockService stockService;
     private final AnalysisService analysisService;
     private final Logger logger = LoggerFactory.getLogger(StockController.class);
+    private final Map<String, CachedStockDetails> stockDetailsCache = new ConcurrentHashMap<>();
+    private static final long STOCK_DETAILS_CACHE_MS = 60_000;
 
     @Autowired
     public StockController(StockService stockService, AnalysisService analysisService) {
@@ -39,14 +42,34 @@ public class StockController {
     @GetMapping({"/{symbol}", "/{symbol}/details"})
     public ResponseEntity<StockDetails> getStockDetails(@PathVariable String symbol) {
         try {
+            CachedStockDetails cached = stockDetailsCache.get(symbol);
+            if (cached != null && !cached.isExpired()) {
+                return ResponseEntity.ok(cached.details);
+            }
+
             StockDetails details = stockService.getStockDetails(symbol);
             if (details != null) {
+                stockDetailsCache.put(symbol, new CachedStockDetails(details));
                 return ResponseEntity.ok(details);
             }
             return ResponseEntity.notFound().build();
         } catch (Exception e) {
             logger.error("Error fetching stock details for {}: {}", symbol, e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    private static class CachedStockDetails {
+        private final StockDetails details;
+        private final long cachedAt;
+
+        private CachedStockDetails(StockDetails details) {
+            this.details = details;
+            this.cachedAt = System.currentTimeMillis();
+        }
+
+        private boolean isExpired() {
+            return System.currentTimeMillis() - cachedAt > STOCK_DETAILS_CACHE_MS;
         }
     }
 
